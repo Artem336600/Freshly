@@ -36,8 +36,8 @@ def generate_fact():
         # Возврат ответа в формате JSON
         return jsonify({
             "user_message": user_message,
-            "response": response_message  # Отправляем как есть
-        })
+            "response": response_message
+        }), 200, {'Content-Type': 'application/json; charset=utf-8'}
 
     except Exception as e:
         print(f"Error occurred: {e}")
