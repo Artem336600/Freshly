@@ -33,13 +33,10 @@ def generate_fact():
         # Получение текста ответа
         response_message = completion.choices[0].message['content'] if 'content' in completion.choices[0].message else "Error in response"
         
-        # Декодирование Unicode-escape
-        response_message = response_message.encode('utf-8').decode('unicode_escape')
-
         # Возврат ответа в формате JSON
         return jsonify({
             "user_message": user_message,
-            "response": response_message
+            "response": response_message  # Не нужно декодировать Unicode-escape
         })
 
     except Exception as e:
