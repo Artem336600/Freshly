@@ -1,11 +1,16 @@
 from flask import Flask, request, jsonify
 import openai
+import os
 
 # Настройка клиента OpenAI
 openai.api_key = "sk-aitunnel-KWqlBaHF6iwBKoPQ0NAtIXEKglXEFDk2"  # Ваш ключ
 openai.api_base = "https://api.aitunnel.ru/v1/"  # Указываем кастомный URL, если требуется
 
 app = Flask(__name__)
+
+
+port = int(os.environ.get("PORT", 5000))
+
 
 # Эндпоинт для генерации ответа
 @app.route('/generate-fact', methods=['POST'])
@@ -37,4 +42,4 @@ def generate_fact():
 
 # Запуск сервера
 if __name__ == '__main__':
-    app.run(debug=True)
+    app.run(host="0.0.0.0", port=port)
