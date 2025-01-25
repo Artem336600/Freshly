@@ -9,7 +9,7 @@ openai.api_base = "https://api.aitunnel.ru/v1/"  # Указываем касто
 app = Flask(__name__)
 
 
-port = int(os.environ.get("PORT", 5000))
+port = int(os.environ.get("PORT", 8080))
 
 
 # Эндпоинт для генерации ответа
