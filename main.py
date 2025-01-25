@@ -32,11 +32,11 @@ def generate_fact():
 
         # Получение текста ответа
         response_message = completion.choices[0].message['content'] if 'content' in completion.choices[0].message else "Error in response"
-        
+
         # Возврат ответа в формате JSON
         return jsonify({
             "user_message": user_message,
-            "response": response_message  # Не нужно декодировать Unicode-escape
+            "response": response_message  # Отправляем как есть
         })
 
     except Exception as e:
@@ -45,5 +45,4 @@ def generate_fact():
 
 # Запуск сервера
 if __name__ == '__main__':
-    # Привязка к адресу 0.0.0.0 для доступа извне
     app.run(host="0.0.0.0", port=port)
