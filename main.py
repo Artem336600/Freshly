@@ -1,12 +1,9 @@
 from flask import Flask, request, jsonify
 import openai
 
-
 # Настройка клиента OpenAI
-client = openai(
-    api_key="sk-aitunnel-KWqlBaHF6iwBKoPQ0NAtIXEKglXEFDk2",  # Ваш ключ
-    base_url="https://api.aitunnel.ru/v1/",
-)
+openai.api_key = "sk-aitunnel-KWqlBaHF6iwBKoPQ0NAtIXEKglXEFDk2"  # Ваш ключ
+openai.api_base = "https://api.aitunnel.ru/v1/"  # Указываем кастомный URL, если требуется
 
 app = Flask(__name__)
 
@@ -19,14 +16,14 @@ def generate_fact():
         user_message = data.get('message', 'Скажи интересный факт')  # Сообщение от пользователя
 
         # Генерация ответа через OpenAI API
-        completion = client.chat.completions.create(
+        completion = openai.ChatCompletion.create(
+            model="gpt-4",  # Укажите модель
             messages=[{"role": "user", "content": user_message}],
-            max_tokens=500,  # Укажите нужное количество токенов
-            model="gpt-4o-mini"  # Модель
+            max_tokens=500  # Укажите нужное количество токенов
         )
 
         # Получение текста ответа
-        response_message = completion.choices[0].message.content
+        response_message = completion.choices[0].message['content']
 
         # Возврат ответа в формате JSON
         return jsonify({
