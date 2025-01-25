@@ -1,8 +1,9 @@
 from flask import Flask, request, jsonify
-from openai import OpenAI
+import openai
+
 
 # Настройка клиента OpenAI
-client = OpenAI(
+client = openai(
     api_key="sk-aitunnel-KWqlBaHF6iwBKoPQ0NAtIXEKglXEFDk2",  # Ваш ключ
     base_url="https://api.aitunnel.ru/v1/",
 )
