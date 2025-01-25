@@ -32,12 +32,12 @@ def generate_fact():
 
         # Получение текста ответа
         response_message = completion.choices[0].message['content'] if 'content' in completion.choices[0].message else "Error in response"
-        
-        # Возврат ответа в формате JSON с ensure_ascii=False для корректного отображения символов
+        print(response_message)
+        # Возврат ответа в формате JSON
         return jsonify({
             "user_message": user_message,
             "response": response_message
-        }, ensure_ascii=False)
+        })
 
     except Exception as e:
         print(f"Error occurred: {e}")
