@@ -1,6 +1,7 @@
 from flask import Flask, request, jsonify
 import openai
 import os
+from flask_cors import CORS  # Импортируем CORS
 
 # Настройка клиента OpenAI
 openai.api_key = "sk-aitunnel-KWqlBaHF6iwBKoPQ0NAtIXEKglXEFDk2"  # Ваш ключ
@@ -8,9 +9,11 @@ openai.api_base = "https://api.aitunnel.ru/v1/"  # Указываем касто
 
 app = Flask(__name__)
 
+# Разрешаем все домены для CORS (по умолчанию открываем доступ всем)
+CORS(app)
 
+# Получение порта из переменных окружения, или использование порта по умолчанию
 port = int(os.environ.get("PORT", 8080))
-
 
 # Эндпоинт для генерации ответа
 @app.route('/', methods=['POST'])
@@ -28,7 +31,7 @@ def generate_fact():
         )
 
         # Получение текста ответа
-        response_message = completion.choices[0].message['content']
+        response_message = completion.choices[0].message['content'] if 'content' in completion.choices[0].message else "Error in response"
 
         # Возврат ответа в формате JSON
         return jsonify({
@@ -39,7 +42,7 @@ def generate_fact():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
-
 # Запуск сервера
 if __name__ == '__main__':
+    # Привязка к адресу 0.0.0.0 для доступа извне
     app.run(host="0.0.0.0", port=port)
