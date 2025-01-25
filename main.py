@@ -40,6 +40,7 @@ def generate_fact():
         })
 
     except Exception as e:
+        print(f"Error occurred: {e}")
         return jsonify({"error": str(e)}), 500
 
 # Запуск сервера
