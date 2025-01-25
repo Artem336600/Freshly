@@ -32,7 +32,7 @@ def generate_fact():
 
         # Получение текста ответа
         response_message = completion.choices[0].message['content'] if 'content' in completion.choices[0].message else "Error in response"
-
+    
         # Возврат ответа в формате JSON
         return jsonify({
             "user_message": user_message,
@@ -42,7 +42,10 @@ def generate_fact():
     except Exception as e:
         print(f"Error occurred: {e}")
         return jsonify({"error": str(e)}), 500
-
+@app.after_request
+def after_request(response):
+    response.headers.add('Access-Control-Allow-Headers', 'Content-Type')
+    return response
 # Запуск сервера
 if __name__ == '__main__':
     app.run(host="0.0.0.0", port=port)
