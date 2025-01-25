@@ -31,7 +31,7 @@ def generate_fact():
         )
 
         # Получение текста ответа
-        response_message = bytes(response_message, 'utf-8').decode('unicode_escape')
+        response_message = completion.choices[0].message['content'] if 'content' in completion.choices[0].message else "Error in response"
 
         # Возврат ответа в формате JSON
         return jsonify({
