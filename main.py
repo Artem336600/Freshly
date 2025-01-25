@@ -5,7 +5,7 @@ from flask_cors import CORS  # Импортируем CORS
 
 # Настройка клиента OpenAI
 openai.api_key = "sk-aitunnel-KWqlBaHF6iwBKoPQ0NAtIXEKglXEFDk2"  # Ваш ключ
-openai.api_base = "https://api.aitunnel.ru/v1/"  # Указываем кастомный URL, если требуется
+openai.api_base = "https://api.aitunnel.ru/v1"  # Указываем кастомный URL, если требуется
 
 app = Flask(__name__)
 
