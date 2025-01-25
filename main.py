@@ -11,6 +11,9 @@ app = Flask(__name__)
 
 port = int(os.environ.get("PORT", 8080))
 
+@app.route('/')
+def home():
+    return "Welcome to my Flask app!"
 
 # Эндпоинт для генерации ответа
 @app.route('/generate-fact', methods=['POST'])
