@@ -24,7 +24,7 @@ def generate_product_set():
         completion = openai.ChatCompletion.create(
             model="gpt-4",  
             messages=[
-                {"role": "system", "content": "Ты помощник, который предлагает оптимальные наборы продуктов для еды."},
+                {"role": "system", "content": "Ты помощник, который предлагает набор продуктов. Просто отвечай списком продуктов, подходящих для запроса, без лишних уточнений."},
                 {"role": "user", "content": user_message}
             ],
             max_tokens=500  
