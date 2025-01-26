@@ -18,7 +18,7 @@ def generate_product_set():
     try:
         # Получение JSON-данных из запроса
         data = request.json
-        user_message = data.get('message', 'Предложи набор продуктов для ужина')  # Запрос пользователя
+        user_message = data.get('message', 'Подбери интересные блюда и ингредиенты на любую тему')  # Запрос по умолчанию
 
         # Генерация ответа с предложением набора продуктов
         completion = openai.ChatCompletion.create(
