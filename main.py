@@ -20,9 +20,9 @@ api_key = 'smKrnj6cMHni2QSNHZjIBInPlyErMHSu'
 model = "mistral-small-latest"
 client = Mistral(api_key=api_key)
 
-# Функция для получения списка продуктов из базы данных
-def get_available_products():
-    response = supabase.table("products").select("*").execute()
+# Функция для получения списка продуктов с дополнительной информацией из базы данных
+def get_products_info():
+    response = supabase.table("products").select("id, name, quantity, expiration_date, priority").execute()
     return response.data
 
 @app.route('/get_products', methods=['POST'])
@@ -34,15 +34,15 @@ def get_products():
         if not user_message:
             return jsonify({"error": "Пожалуйста, отправьте сообщение."}), 400
 
-        # Получаем список доступных продуктов из базы данных
-        products = get_available_products()
+        # Получаем список доступных продуктов с дополнительной информацией из базы данных
+        products_info = get_products_info()
 
         # Если продукты не найдены
-        if not products:
+        if not products_info:
             return jsonify({"error": "Не удалось получить продукты из базы данных."}), 500
 
-        # Формируем список продуктов для передачи в запрос к ИИ
-        products_list = "\n".join([f"{i+1}. {product['name']}" for i, product in enumerate(products)])  # product['name'] - это название продукта
+        # Формируем список продуктов с информацией для передачи в запрос к ИИ
+        products_list = "\n".join([f"{i+1}. Название: {product['name']}, Количество: {product['quantity']}, Срок годности: {product['expiration_date']}, Приоритет: {product['priority']}" for i, product in enumerate(products_info)])
 
         # Формируем запрос для ИИ
         user_message_with_products = f"Вот список доступных продуктов:\n{products_list}\nКакие наборы можно из них составить?"
