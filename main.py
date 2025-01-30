@@ -72,27 +72,28 @@ def get_products():
 @app.route('/add_product', methods=['POST'])
 def add_product():
     try:
-        # Получаем данные из POST-запроса
-        product_name = request.json.get('name')
-        product_description = request.json.get('description')
-        product_price = request.json.get('price')
-        product_category = request.json.get('category')
-
-        if not product_name or not product_price:
-            return jsonify({"error": "Название и цена продукта обязательны."}), 400
-
-        # Добавляем продукт в Supabase
-        response = supabase.table("products").insert({
-            "name": product_name,
-            "description": product_description,
-            "price": product_price,
-            "category": product_category
+        # Получаем данные из запроса
+        data = request.json
+        
+        # Проверяем, что все необходимые поля присутствуют
+        required_fields = ['name', 'quantity', 'expiry_date', 'priority']
+        for field in required_fields:
+            if field not in data:
+                return jsonify({"error": f"Отсутствует поле {field}."}), 400
+        
+        # Добавляем продукт в базу данных Supabase
+        response = supabase.table('products').insert({
+            'name': data['name'],
+            'quantity': data['quantity'],
+            'expiry_date': data['expiry_date'],
+            'priority': data['priority']
         }).execute()
 
+        # Проверяем успешность добавления
         if response.status_code != 201:
             return jsonify({"error": "Не удалось добавить продукт в базу данных."}), 500
-
-        return jsonify({"message": "Продукт успешно добавлен!"}), 200
+        
+        return jsonify({"message": "Продукт успешно добавлен."}), 201
 
     except Exception as e:
         return jsonify({"error": f"Произошла ошибка: {str(e)}"}), 500
