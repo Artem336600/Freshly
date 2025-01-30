@@ -21,7 +21,7 @@ model = "mistral-small-latest"
 client = Mistral(api_key=api_key)
 
 # Функция для получения списка продуктов из базы данных с пагинацией
-def get_available_products(limit=20, offset=0):
+def get_available_products(limit=30, offset=0):
     # Получаем продукты с лимитом и смещением
     response = supabase.table("products").select("*").range(offset, offset + limit - 1).execute()
     return response.data
