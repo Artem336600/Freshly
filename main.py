@@ -2,6 +2,7 @@ from flask import Flask, request, jsonify
 from mistralai import Mistral
 from flask_cors import CORS
 import os
+from database import get_available_products  # Импортируем функцию из базы данных
 
 # Инициализация приложения Flask
 app = Flask(__name__)
@@ -20,6 +21,15 @@ def get_products():
         
         if not user_message:
             return jsonify({"error": "Пожалуйста, отправьте сообщение."}), 400
+        
+        # Получаем продукты из базы данных
+        products = get_available_products()
+        
+        # Формируем список продуктов для передачи в запрос к ИИ
+        products_list = "\n".join([f"{i+1}. {product[1]}" for i, product in enumerate(products)])
+
+        # Формируем запрос для ИИ
+        user_message_with_products = f"Вот список доступных продуктов:\n{products_list}\nКакие наборы можно из них составить?"
 
         # Запрос к Mistral для получения ответа
         chat_response = client.chat.complete(
@@ -27,11 +37,11 @@ def get_products():
             messages=[
                 {
                     "role": "system",
-                    "content": "Ты профессиональный подборщик продуктов под каждый запрос пользователя, какую-бы тему он не ввёл, ты выдаёшь ему список продуктов питания подходящих по этой теме, выводи только продукты в стобик, никакого лишнего текста, только продукты, выводи в столбик пронумерованными, выводи всегда 20 продуктов. Предлагай только реальные блюда. Из еды ты можешь предлагать только: Говно, говно голубиное, китаец",
+                    "content": "Ты профессиональный подборщик продуктов под каждый запрос пользователя, какую-бы тему он не ввёл, ты выдаёшь ему список продуктов питания подходящих по этой теме, выводи только продукты в столбик, пронумерованными, выводи всегда 20 продуктов."
                 },
                 {
                     "role": "user",
-                    "content": user_message
+                    "content": user_message_with_products
                 },
             ]
         )
