@@ -69,6 +69,34 @@ def get_products():
 
     except Exception as e:
         return jsonify({"error": f"Произошла ошибка: {str(e)}"}), 500
+@app.route('/add_product', methods=['POST'])
+def add_product():
+    try:
+        # Получаем данные из POST-запроса
+        product_name = request.json.get('name')
+        product_description = request.json.get('description')
+        product_price = request.json.get('price')
+        product_category = request.json.get('category')
+
+        if not product_name or not product_price:
+            return jsonify({"error": "Название и цена продукта обязательны."}), 400
+
+        # Добавляем продукт в Supabase
+        response = supabase.table("products").insert({
+            "name": product_name,
+            "description": product_description,
+            "price": product_price,
+            "category": product_category
+        }).execute()
+
+        if response.status_code != 201:
+            return jsonify({"error": "Не удалось добавить продукт в базу данных."}), 500
+
+        return jsonify({"message": "Продукт успешно добавлен!"}), 200
+
+    except Exception as e:
+        return jsonify({"error": f"Произошла ошибка: {str(e)}"}), 500
+
 
 # Запуск сервера
 if __name__ == '__main__':
