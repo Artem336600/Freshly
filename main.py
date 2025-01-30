@@ -85,13 +85,15 @@ def add_product():
         response = supabase.table('products').insert({
             'name': data['name'],
             'quantity': data['quantity'],
-            'expiration_date': data['expiration_date'],  # исправлено
+            'expiration_date': data['expiration_date'],
             'priority': data['priority']
         }).execute()
 
-        if response.data is None or response.error:
+        # Проверка успешности добавления
+        if response.status_code != 201:  # Проверяем статусный код
             return jsonify({"error": "Не удалось добавить продукт в базу данных."}), 500
         
+        # Если всё прошло успешно
         return jsonify({"message": "Продукт успешно добавлен."}), 201
 
     except Exception as e:
