@@ -89,15 +89,16 @@ def add_product():
             'priority': data['priority']
         }).execute()
 
-        # Проверка успешности добавления
-        if response.status_code != 201:  # Проверяем статусный код
+        # Проверка успешности добавления по статусу
+        if response.status_code != 201:  # Проверяем, что статус 201 (успешно создано)
             return jsonify({"error": "Не удалось добавить продукт в базу данных."}), 500
-        
+
         # Если всё прошло успешно
         return jsonify({"message": "Продукт успешно добавлен."}), 201
 
     except Exception as e:
         return jsonify({"error": f"Произошла ошибка: {str(e)}"}), 500
+
 
 
 
