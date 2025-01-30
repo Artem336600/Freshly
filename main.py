@@ -20,10 +20,9 @@ api_key = 'smKrnj6cMHni2QSNHZjIBInPlyErMHSu'
 model = "mistral-small-latest"
 client = Mistral(api_key=api_key)
 
-# Функция для получения списка продуктов из базы данных с пагинацией
-def get_available_products(limit=30, offset=0):
-    # Получаем продукты с лимитом и смещением
-    response = supabase.table("products").select("*").range(offset, offset + limit - 1).execute()
+# Функция для получения списка продуктов из базы данных
+def get_available_products():
+    response = supabase.table("products").select("*").execute()
     return response.data
 
 @app.route('/get_products', methods=['POST'])
@@ -35,7 +34,7 @@ def get_products():
         if not user_message:
             return jsonify({"error": "Пожалуйста, отправьте сообщение."}), 400
 
-        # Получаем список доступных продуктов из базы данных (с лимитом 20 и смещением 0)
+        # Получаем список доступных продуктов из базы данных
         products = get_available_products()
 
         # Если продукты не найдены
