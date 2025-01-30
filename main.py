@@ -127,47 +127,7 @@ def add_product():
 
     except Exception as e:
         return jsonify({"error": f"Произошла ошибка: {str(e)}"}), 500
-@app.route('/delete_product', methods=['POST'])
-def delete_product():
-    try:
-        product_id = request.json.get('id')
 
-        if not product_id:
-            return jsonify({"error": "Отсутствует ID продукта."}), 400
-
-        response = supabase.table('products').delete().match({'id': product_id}).execute()
-
-        if not response.data:
-            return jsonify({"error": "Продукт не найден или уже удален."}), 404
-
-        return jsonify({"message": "Продукт успешно удален."}), 200
-
-    except Exception as e:
-        return jsonify({"error": f"Ошибка: {str(e)}"}), 500
-
-# 🔹 Функция обновления информации о продукте
-@app.route('/update_product', methods=['POST'])
-def update_product():
-    try:
-        data = request.json
-        product_id = data.get('id')
-        updated_info = {key: value for key, value in data.items() if key != 'id'}
-
-        if not product_id:
-            return jsonify({"error": "Отсутствует ID продукта."}), 400
-
-        if not updated_info:
-            return jsonify({"error": "Нет данных для обновления."}), 400
-
-        response = supabase.table('products').update(updated_info).match({'id': product_id}).execute()
-
-        if not response.data:
-            return jsonify({"error": "Продукт не найден."}), 404
-
-        return jsonify({"message": "Информация о продукте успешно обновлена."}), 200
-
-    except Exception as e:
-        return jsonify({"error": f"Ошибка: {str(e)}"}), 500
 
 # Запуск сервера
 if __name__ == '__main__':
