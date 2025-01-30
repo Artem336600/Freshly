@@ -76,7 +76,7 @@ def add_product():
         data = request.json
         
         # Проверяем, что все необходимые поля присутствуют
-        required_fields = ['name', 'quantity', 'expiry_date', 'priority']
+        required_fields = ['name', 'quantity', 'expiration_date', 'priority']
         for field in required_fields:
             if field not in data:
                 return jsonify({"error": f"Отсутствует поле {field}."}), 400
@@ -85,7 +85,7 @@ def add_product():
         response = supabase.table('products').insert({
             'name': data['name'],
             'quantity': data['quantity'],
-            'expiry_date': data['expiry_date'],
+            'expiration_date': data['expiration_date'],  # исправлено
             'priority': data['priority']
         }).execute()
 
@@ -97,6 +97,7 @@ def add_product():
 
     except Exception as e:
         return jsonify({"error": f"Произошла ошибка: {str(e)}"}), 500
+
 
 
 # Запуск сервера
