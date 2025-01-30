@@ -21,9 +21,37 @@ model = "mistral-small-latest"
 client = Mistral(api_key=api_key)
 
 # Функция для получения списка продуктов с дополнительной информацией из базы данных
-def get_products_info():
-    response = supabase.table("products").select("id, name, quantity, expiration_date, priority").execute()
+def get_available_products():
+    response = supabase.table("products").select("*").execute()
     return response.data
+
+@app.route('/get_products_info', methods=['POST'])
+def get_products_info():
+    try:
+        # Получаем список доступных продуктов из базы данных
+        products = get_available_products()
+
+        # Если продукты не найдены
+        if not products:
+            return jsonify({"error": "Продукты не найдены."}), 500
+
+        # Формируем список продуктов с их информацией
+        product_info = []
+        for product in products:
+            product_info.append({
+                "name": product['name'],
+                "quantity": product['quantity'],
+                "expiration_date": product['expiration_date'],
+                "priority": product['priority']
+            })
+
+        # Возвращаем данные о продуктах
+        return jsonify({
+            "products": product_info
+        })
+
+    except Exception as e:
+        return jsonify({"error": f"Произошла ошибка: {str(e)}"}), 500
 
 @app.route('/get_products', methods=['POST'])
 def get_products():
