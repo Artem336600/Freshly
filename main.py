@@ -101,7 +101,7 @@ def add_product():
         data = request.json
         
         # Проверяем, что все необходимые поля присутствуют
-        required_fields = ['name', 'quantity', 'expiration_date', 'priority']
+        required_fields = ['name', 'quantity', 'expiration_date', 'priority', 'image_url']
         for field in required_fields:
             if field not in data:
                 return jsonify({"error": f"Отсутствует поле {field}."}), 400
@@ -111,7 +111,8 @@ def add_product():
             'name': data['name'],
             'quantity': data['quantity'],
             'expiration_date': data['expiration_date'],
-            'priority': data['priority']
+            'priority': data['priority'],
+            'image_url': data['image_url']  # Теперь сохраняем ссылку на картинку
         }).execute()
 
         # Проверка успешности добавления по наличию данных
