@@ -28,30 +28,26 @@ def get_available_products():
 @app.route('/get_products_info', methods=['POST'])
 def get_products_info():
     try:
-        # Получаем список доступных продуктов из базы данных
         products = get_available_products()
-
-        # Если продукты не найдены
         if not products:
             return jsonify({"error": "Продукты не найдены."}), 500
 
-        # Формируем список продуктов с их информацией
-        product_info = []
-        for product in products:
-            product_info.append({
+        product_info = [
+            {
                 "name": product['name'],
                 "quantity": product['quantity'],
                 "expiration_date": product['expiration_date'],
-                "priority": product['priority']
-            })
+                "priority": product['priority'],
+                "image_url": product.get('image_url', '')  # Добавили URL изображения
+            }
+            for product in products
+        ]
 
-        # Возвращаем данные о продуктах
-        return jsonify({
-            "products": product_info
-        })
+        return jsonify({"products": product_info})
 
     except Exception as e:
         return jsonify({"error": f"Произошла ошибка: {str(e)}"}), 500
+
 
 @app.route('/get_products', methods=['POST'])
 def get_products():
@@ -70,7 +66,7 @@ def get_products():
             return jsonify({"error": "Не удалось получить продукты из базы данных."}), 500
 
         # Формируем список продуктов с информацией для передачи в запрос к ИИ
-        products_list = "\n".join([f"{i+1}. Название: {product['name']}, Количество: {product['quantity']}, Срок годности: {product['expiration_date']}, Приоритет: {product['priority']}" for i, product in enumerate(products_info)])
+        products_list = "\n".join([f"{i+1}. Название: {product['name']}, Количество: {product['quantity']}, Срок годности: {product['expiration_date']}, Приоритет: {product['priority']}, Изображение: {product['image_url']}" for i, product in enumerate(products_info)])
 
         # Формируем запрос для ИИ, включая список продуктов
         user_message_with_products = f"Вот список доступных продуктов:\n{products_list}\nПожалуйста, составь набор продуктов, соответствующий запросу: {user_message}"
