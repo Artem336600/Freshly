@@ -24,6 +24,28 @@ client = Mistral(api_key=api_key)
 def get_available_products():
     response = supabase.table("products").select("*").execute()
     return response.data
+    
+@app.route('/get_product_image', methods=['POST'])
+def get_product_image():
+    try:
+        data = request.json
+        product_name = data.get("name")
+
+        if not product_name:
+            return jsonify({"error": "Название продукта не указано."}), 400
+
+        # Запрос к базе Supabase по имени продукта
+        response = supabase.table("products").select("image_url").eq("name", product_name).execute()
+
+        # Проверяем, есть ли результат
+        if not response.data or len(response.data) == 0:
+            return jsonify({"error": "Изображение не найдено."}), 404
+
+        # Возвращаем URL изображения
+        return jsonify({"image_url": response.data[0]["image_url"]})
+
+    except Exception as e:
+        return jsonify({"error": f"Произошла ошибка: {str(e)}"}), 500
 
 @app.route('/get_products_info', methods=['POST'])
 def get_products_info():
