@@ -22,7 +22,7 @@ client = Mistral(api_key=api_key)
 
 # Функция для получения списка продуктов с дополнительной информацией из базы данных
 def get_available_products():
-    response = supabase.table("products").select("*").execute()
+    response = supabase.table("Freshly_products").select("*").execute()
     return response.data
     
 @app.route('/get_product_image', methods=['POST'])
@@ -42,7 +42,7 @@ def get_product_image():
             return jsonify({"error": "Изображение не найдено."}), 404
 
         # Возвращаем URL изображения
-        return jsonify({"image_url": response.data[0]["image_url"]})
+        return jsonify({"image_url": response.data[0]["img"]})
 
     except Exception as e:
         return jsonify({"error": f"Произошла ошибка: {str(e)}"}), 500
@@ -58,9 +58,7 @@ def get_products_info():
             {
                 "name": product['name'],
                 "quantity": product['quantity'],
-                "expiration_date": product['expiration_date'],
-                "priority": product['priority'],
-                "image_url": product.get('image_url', '')  # Добавили URL изображения
+                "image_url": product.get('img', '')  # Добавили URL изображения
             }
             for product in products
         ]
