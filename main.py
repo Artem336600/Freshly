@@ -35,14 +35,14 @@ def get_product_image():
             return jsonify({"error": "Название продукта не указано."}), 400
 
         # Запрос к базе Supabase по имени продукта
-        response = supabase.table("products").select("image_url").eq("name", product_name).execute()
+        response = supabase.table("Freshly_products").select("img").eq("name", product_name).execute()
 
         # Проверяем, есть ли результат
         if not response.data or len(response.data) == 0:
             return jsonify({"error": "Изображение не найдено."}), 404
 
         # Возвращаем URL изображения
-        return jsonify({"image_url": response.data[0]["img"]})
+        return jsonify({"img": response.data[0]["img"]})
 
     except Exception as e:
         return jsonify({"error": f"Произошла ошибка: {str(e)}"}), 500
