@@ -14,10 +14,10 @@ supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
 app = Flask(__name__)
 CORS(app)
 
-# Функция для получения списка продуктов с колонками name и img
+# Функция для получения списка продуктов со всеми колонками
 def get_products():
-    # Выбираем только колонки name и img из таблицы Freshly_products
-    response = supabase.table("Freshly_products").select("name, img").execute()
+    # Выбираем все колонки из таблицы Freshly_products
+    response = supabase.table("Freshly_products").select("*").execute()
     return response.data
 
 @app.route('/get_products_info', methods=['POST'])
@@ -27,12 +27,9 @@ def get_products_info():
         if not products:
             return jsonify({"error": "Продукты не найдены."}), 404
 
-        # Формируем список продуктов с полями name и img
+        # Возвращаем все данные о продуктах как есть
         product_info = [
-            {
-                "name": product.get("name"),
-                "img": product.get("img")
-            }
+            {key: value for key, value in product.items()}
             for product in products
         ]
         return jsonify({"products": product_info})
