@@ -62,7 +62,7 @@ def get_products_info():
             product_details = (
                 f"Название: {product.get('name', 'Без названия')}, "
                 f"Описание: {product.get('description', 'Нет описания')}, "
-                f"КБЖУ: {product.get('kbju', 'Не указано')}, "
+                f"кбжу: {product.get('кбжу', 'Не указано')}, "
                 f"Дополнительные теги: {product.get('secondary_tags', 'Не указано')}"
             )
 
