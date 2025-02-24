@@ -78,4 +78,4 @@ def make_dish():
         return jsonify({"error": f"Произошла ошибка: {str(e)}"}), 500
 
 if __name__ == '__main__':
-    app.run(debug=True, host="0.0.0.0", port=int(os.getenv("PORT", 5000))), мне нужно, чтобы твйо код формировал запрос и отправлял его на '/make_prod
+    app.run(debug=True, host="0.0.0.0", port=int(os.getenv("PORT", 5000)))
