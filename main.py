@@ -23,6 +23,11 @@ def get_products():
     response = supabase.table("Freshly_products").select("*").execute()
     return response.data
 
+def iterate_products():
+    products = get_products()
+    for product in products:
+        pass
+
 @app.route('/get_products_info', methods=['POST'])
 def get_products_info():
     try:
@@ -52,7 +57,7 @@ def make_dish():
             return jsonify({"error": "Ошибка: Введите вопрос."}), 400
 
         # Формируем системное сообщение
-        system_message = "По запросу пользователя ты должен выводить наборы еды по заданной теме"
+        system_message = "По запросу пользователя ты должен выводить наборы еды по заданной теме, выводи только еду через запятую"
         
         # Отправляем запрос к Mistral
         chat_response = client.chat.complete(
