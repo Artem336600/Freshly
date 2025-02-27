@@ -4,6 +4,7 @@ import os
 from supabase import create_client
 from mistralai import Mistral
 
+# Данные для подключения к Supabase
 SUPABASE_URL = "https://rgyhaiaecqusymobdqdd.supabase.co"
 SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJneWhhaWFlY3F1c3ltb2JkcWRkIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTczODI0NjkyOCwiZXhwIjoyMDUzODIyOTI4fQ.oZe5DEPVuSCAzeKZxLInsF8iJWXBEGS9I9H6gGMBlmc"
 api_key = 'smKrnj6cMHni2QSNHZjIBInPlyErMHSu'
@@ -27,7 +28,7 @@ def compare_products(ai_generated_list, db_products):
     try:
         matched_products = []
         system_message = "Сравни список запрошенных продуктов с продуктами из базы данных и определи, какие из них максимально близки по смыслу или названию. Возвращай только те продукты из базы данных, которые соответствуют запрошенным. Запрошенные продукты могут не совпадать буквально с названиями в базе данных, используй логику и контекст."
-        ai_list_str = ", ".join(ai_generated_list[:10])  # Ограничим до 10 продуктов
+        ai_list_str = ", ".join(ai_generated_list[:10])
         db_products_str = "\n".join([f"{p['name']} (id: {p['id']})" for p in db_products])
         comparison_prompt = f"Запрошенные продукты: {ai_list_str}\nПродукты из базы данных:\n{db_products_str}\n\nКакие продукты из базы данных соответствуют запрошенным?"
         print("Comparison prompt length:", len(comparison_prompt))
@@ -50,6 +51,17 @@ def compare_products(ai_generated_list, db_products):
     except Exception as e:
         print(f"Error in compare_products: {str(e)}")
         raise
+
+@app.route('/get_products_info', methods=['POST'])
+def get_products_info():
+    try:
+        products = get_products()
+        if not products:
+            return jsonify({"error": "Продукты не найдены."}), 404
+        product_info = [{key: value for key, value in product.items()} for product in products]
+        return jsonify({"products": product_info})
+    except Exception as e:
+        return jsonify({"error": f"Произошла ошибка: {str(e)}"}), 500
 
 @app.route('/make_prod', methods=['POST'])
 def make_dish():
@@ -78,7 +90,7 @@ def make_dish():
                 generated_products = eval(generated_products_text)
             else:
                 generated_products = generated_products_text.split(', ')
-            generated_products = [str(p).strip() for p in generated_products[:10]]  # Ограничим до 10 и уберем лишние пробелы
+            generated_products = [str(p).strip() for p in generated_products[:10]]
         except Exception as e:
             print("Parse error:", str(e))
             generated_products = generated_products_text.split(', ')[:10]
@@ -103,7 +115,9 @@ def make_dish():
             "products": product_info
         }
         print("Returning:", result)
-        return jsonify(result)
+        response = jsonify(result)
+        print("Response headers:", response.headers)
+        return response
     except Exception as e:
         error_response = {"error": f"Произошла ошибка: {str(e)}"}
         print("Error occurred:", error_response)
