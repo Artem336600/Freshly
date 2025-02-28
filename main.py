@@ -100,6 +100,7 @@ def make_dish():
                         "description": "Описание отсутствует",
                         "image": "https://via.placeholder.com/150"
                     })
+                    print(f"Product: '{user_product}' - Image URL: https://via.placeholder.com/150 (search timeout)")
                     continue
 
                 try:
@@ -140,9 +141,11 @@ def make_dish():
                         )
                         image = image_container.find_element(By.TAG_NAME, "img")
                         img_src = image.get_attribute("src")
-                        print(f"Found image for '{user_product}': {img_src}")
+                        print(f"Product: '{link_text}' - Image URL: {img_src}")
                     except TimeoutException as e:
-                        print(f"Image not found for '{user_product}': {str(e)}")
+                        print(f"Product: '{link_text}' - Image URL: {img_src} (image not found, timeout: {str(e)})")
+                    except Exception as e:
+                        print(f"Product: '{link_text}' - Image URL: {img_src} (error: {str(e)})")
 
                     matched_products.append({
                         "name": link_text,
@@ -160,6 +163,7 @@ def make_dish():
                         "description": "Описание отсутствует",
                         "image": "https://via.placeholder.com/150"
                     })
+                    print(f"Product: '{user_product}' - Image URL: https://via.placeholder.com/150 (search error)")
 
             final_result = {
                 "message": "Подобраны продукты с сайта Яндекс Лавка",
