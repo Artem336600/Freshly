@@ -1,6 +1,7 @@
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 import os
+import json
 from supabase import create_client
 from mistralai import Mistral
 
@@ -15,7 +16,6 @@ supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
 app = Flask(__name__)
 CORS(app)
 
-# Функция для получения всех продуктов из базы данных
 def get_products():
     try:
         response = supabase.table("Freshly_products").select("*").execute()
@@ -25,7 +25,6 @@ def get_products():
         print(f"Error fetching products from DB: {str(e)}")
         raise
 
-# Основной маршрут для обработки запроса пользователя
 @app.route('/make_prod', methods=['POST'])
 def make_dish():
     try:
@@ -43,8 +42,10 @@ def make_dish():
             print("No products in DB")
             return jsonify({"error": "База данных пуста."}), 404
 
-        # Формируем список продуктов для ИИ
-        db_products_str = "\n".join([f"{p['name']} (id: {p['id']})" for p in db_products])
+        # Ограничиваем список продуктов для ИИ (например, первые 50)
+        db_products_limited = db_products[:50]
+        db_products_str = "\n".join([f"{p['name']} (id: {p['id']})" for p in db_products_limited])
+        print("Limited products for AI:", db_products_str)
         
         # Формируем промпт для ИИ
         system_message = (
@@ -53,24 +54,29 @@ def make_dish():
             "Проанализируй запрос пользователя и выбери из списка только те продукты, "
             "которые подходят для указанной темы или блюда. "
             "Верни только подходящие продукты в формате JSON: "
-            "{\"message\": \"...\", \"products\": [{\"id\": ..., \"name\": \"...\", ...}, ...]}."
+            "{\"message\": \"...\", \"products\": [{\"id\": ..., \"name\": \"...\"}, ...]}."
         )
         user_prompt = (
             f"Запрос пользователя: {user_message}\n"
             f"Список всех продуктов:\n{db_products_str}\n\n"
             "Выбери подходящие продукты и верни их в формате JSON."
         )
+        print("Prompt length:", len(user_prompt))
 
         # Отправляем запрос к Mistral
-        chat_response = client.chat.complete(
-            model=model,
-            messages=[
-                {"role": "system", "content": system_message},
-                {"role": "user", "content": user_prompt}
-            ]
-        )
-        response_text = chat_response.choices[0].message.content
-        print("AI response:", response_text)
+        try:
+            chat_response = client.chat.complete(
+                model=model,
+                messages=[
+                    {"role": "system", "content": system_message},
+                    {"role": "user", "content": user_prompt}
+                ]
+            )
+            response_text = chat_response.choices[0].message.content
+            print("AI response:", response_text)
+        except Exception as e:
+            print(f"Error calling Mistral API: {str(e)}")
+            return jsonify({"error": f"Ошибка при обращении к ИИ: {str(e)}"}), 500
 
         # Парсим ответ ИИ как JSON
         try:
@@ -80,12 +86,12 @@ def make_dish():
             print(f"Error parsing AI response as JSON: {str(e)}")
             return jsonify({"error": "Ошибка: ИИ вернул некорректный формат ответа."}), 500
 
-        # Проверяем, что результат содержит необходимые поля
+        # Проверяем формат результата
         if not isinstance(result, dict) or "message" not in result or "products" not in result:
             print("Invalid AI response format")
             return jsonify({"error": "Ошибка: Некорректный формат ответа от ИИ."}), 500
 
-        # Фильтруем продукты из базы данных по ID или имени, указанным в ответе ИИ
+        # Фильтруем продукты из базы данных
         matched_products = []
         for ai_product in result["products"]:
             for db_product in db_products:
