@@ -10,6 +10,8 @@ from selenium.webdriver.common.by import By
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.chrome.service import Service
 from webdriver_manager.chrome import ChromeDriverManager
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
 
 # Данные для подключения к Mistral
 api_key = 'smKrnj6cMHni2QSNHZjIBInPlyErMHSu'
@@ -78,7 +80,10 @@ def make_dish():
                 search_url = f"https://lavka.yandex.ru/search?text={user_product}"
                 
                 driver.get(search_url)
-                time.sleep(5)  # Ждём загрузки страницы
+                # Ждём загрузки элементов с тайм-аутом 10 секунд
+                WebDriverWait(driver, 10).until(
+                    EC.presence_of_element_located((By.CLASS_NAME, "cbuk31w"))
+                )
 
                 try:
                     # Находим первый элемент результата поиска
@@ -90,7 +95,9 @@ def make_dish():
 
                     # Переходим на страницу товара
                     driver.get(full_url)
-                    time.sleep(5)
+                    WebDriverWait(driver, 10).until(
+                        EC.presence_of_element_located((By.CLASS_NAME, "c17r1xrr"))
+                    )
 
                     # Извлекаем цену и описание
                     product_elements = driver.find_elements(By.CLASS_NAME, "c17r1xrr")
@@ -108,13 +115,16 @@ def make_dish():
                                 description = text_cleaned
 
                     # Извлекаем изображение
-                    img_src = "Изображение отсутствует"
+                    img_src = "https://via.placeholder.com/150"  # Запасной URL для картинки
                     try:
-                        image_container = driver.find_element(By.CLASS_NAME, "ibhxbmx.p1wkliaw")
+                        image_container = WebDriverWait(driver, 10).until(
+                            EC.presence_of_element_located((By.CLASS_NAME, "ibhxbmx.p1wkliaw"))
+                        )
                         image = image_container.find_element(By.TAG_NAME, "img")
                         img_src = image.get_attribute("src")
-                    except:
-                        pass
+                        print(f"Found image for '{user_product}': {img_src}")
+                    except Exception as e:
+                        print(f"Image not found for '{user_product}': {str(e)}")
 
                     matched_products.append({
                         "name": link_text,
@@ -130,7 +140,7 @@ def make_dish():
                         "category": category,
                         "price": "Цена не найдена",
                         "description": "Описание отсутствует",
-                        "image": "Изображение отсутствует"
+                        "image": "https://via.placeholder.com/150"
                     })
 
             final_result = {
