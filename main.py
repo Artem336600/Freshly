@@ -8,6 +8,8 @@ from mistralai import Mistral
 from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.chrome.options import Options
+from selenium.webdriver.chrome.service import Service
+from webdriver_manager.chrome import ChromeDriverManager
 
 # Данные для подключения к Mistral
 api_key = 'smKrnj6cMHni2QSNHZjIBInPlyErMHSu'
@@ -60,12 +62,12 @@ def make_dish():
         if not isinstance(ai_result, dict) or "message" not in ai_result or "products" not in ai_result:
             return jsonify({"error": "Ошибка: Некорректный формат ответа от ИИ."}), 500
 
-        # Настройка веб-драйвера в headless-режиме
+        # Настройка веб-драйвера с webdriver_manager
         chrome_options = Options()
         chrome_options.add_argument("--headless")
         chrome_options.add_argument("--no-sandbox")
         chrome_options.add_argument("--disable-dev-shm-usage")
-        driver = webdriver.Chrome(options=chrome_options)
+        driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=chrome_options)
 
         try:
             # Подбираем данные с сайта для каждого продукта
