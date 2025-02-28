@@ -12,6 +12,7 @@ from selenium.webdriver.chrome.service import Service
 from webdriver_manager.chrome import ChromeDriverManager
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
+from selenium.common.exceptions import TimeoutException, WebDriverException
 
 # Данные для подключения к Mistral
 api_key = 'smKrnj6cMHni2QSNHZjIBInPlyErMHSu'
@@ -64,12 +65,17 @@ def make_dish():
         if not isinstance(ai_result, dict) or "message" not in ai_result or "products" not in ai_result:
             return jsonify({"error": "Ошибка: Некорректный формат ответа от ИИ."}), 500
 
-        # Настройка веб-драйвера с webdriver_manager
+        # Настройка веб-драйвера
         chrome_options = Options()
         chrome_options.add_argument("--headless")
         chrome_options.add_argument("--no-sandbox")
         chrome_options.add_argument("--disable-dev-shm-usage")
-        driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=chrome_options)
+        chrome_options.add_argument("--disable-gpu")  # Дополнительная опция для стабильности
+        try:
+            driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=chrome_options)
+        except WebDriverException as e:
+            print(f"Failed to initialize chromedriver: {str(e)}")
+            return jsonify({"error": f"Ошибка инициализации chromedriver: {str(e)}"}), 500
 
         try:
             # Подбираем данные с сайта для каждого продукта
@@ -79,11 +85,22 @@ def make_dish():
                 category = product["category"]
                 search_url = f"https://lavka.yandex.ru/search?text={user_product}"
                 
+                print(f"Searching for: {user_product} at {search_url}")
                 driver.get(search_url)
-                # Ждём загрузки элементов с тайм-аутом 10 секунд
-                WebDriverWait(driver, 10).until(
-                    EC.presence_of_element_located((By.CLASS_NAME, "cbuk31w"))
-                )
+                try:
+                    WebDriverWait(driver, 10).until(
+                        EC.presence_of_element_located((By.CLASS_NAME, "cbuk31w"))
+                    )
+                except TimeoutException as e:
+                    print(f"Timeout waiting for search results for '{user_product}': {str(e)}")
+                    matched_products.append({
+                        "name": user_product,
+                        "category": category,
+                        "price": "Цена не найдена",
+                        "description": "Описание отсутствует",
+                        "image": "https://via.placeholder.com/150"
+                    })
+                    continue
 
                 try:
                     # Находим первый элемент результата поиска
@@ -94,6 +111,7 @@ def make_dish():
                     link_text = link_element.find_element(By.CLASS_NAME, "l4t8cc8.a1dq5c6d").text
 
                     # Переходим на страницу товара
+                    print(f"Navigating to product page: {full_url}")
                     driver.get(full_url)
                     WebDriverWait(driver, 10).until(
                         EC.presence_of_element_located((By.CLASS_NAME, "c17r1xrr"))
@@ -115,7 +133,7 @@ def make_dish():
                                 description = text_cleaned
 
                     # Извлекаем изображение
-                    img_src = "https://via.placeholder.com/150"  # Запасной URL для картинки
+                    img_src = "https://via.placeholder.com/150"
                     try:
                         image_container = WebDriverWait(driver, 10).until(
                             EC.presence_of_element_located((By.CLASS_NAME, "ibhxbmx.p1wkliaw"))
@@ -123,7 +141,7 @@ def make_dish():
                         image = image_container.find_element(By.TAG_NAME, "img")
                         img_src = image.get_attribute("src")
                         print(f"Found image for '{user_product}': {img_src}")
-                    except Exception as e:
+                    except TimeoutException as e:
                         print(f"Image not found for '{user_product}': {str(e)}")
 
                     matched_products.append({
