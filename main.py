@@ -3,6 +3,7 @@ from flask_cors import CORS
 import os
 import json
 import re
+import random
 from supabase import create_client
 from mistralai import Mistral
 
@@ -20,14 +21,20 @@ CORS(app)
 DISH_CATEGORIES = ["Закуски", "Супы", "Основные блюда", "Гарниры", "Десерты", "Напитки", "Салаты", "Блюда на гриле"]
 
 def get_products():
-    response = supabase.table("Freshly_products").select("*").execute()
-    return response.data
+    try:
+        response = supabase.table("Freshly_products").select("*").execute()
+        print("Products from DB:", len(response.data))
+        return response.data
+    except Exception as e:
+        print(f"Error fetching products: {str(e)}")
+        raise
 
 @app.route('/make_prod', methods=['POST'])
 def make_dish():
     try:
         data = request.get_json()
         user_message = data.get('message')
+        print("Received message:", user_message)
         
         if not user_message:
             return jsonify({"error": "Ошибка: Введите вопрос."}), 400
@@ -36,7 +43,6 @@ def make_dish():
         lines = user_message.split('\n')
         category_counts = {}
         tags = []
-        stores = []
         wishes = ""
 
         for line in lines:
@@ -49,9 +55,6 @@ def make_dish():
             elif "Теги:" in line:
                 tags_part = line.split("Теги:")[1].strip()
                 tags = [tag.strip() for tag in tags_part.split(",")] if tags_part else []
-            elif "Магазины:" in line:
-                stores_part = line.split("Магазины:")[1].strip()
-                stores = [store.strip() for store in stores_part.split(",")] if stores_part else []
             elif "Пожелания:" in line:
                 wishes = line.split("Пожелания:")[1].strip()
 
@@ -59,36 +62,37 @@ def make_dish():
         if not db_products:
             return jsonify({"error": "База данных пуста."}), 404
 
-        # Фильтруем продукты по магазинам (если указано)
-        if stores:
-            db_products = [p for p in db_products if p.get("store", "") in stores]
         db_products_names = [p["name"] for p in db_products]
         db_products_str = "\n".join(db_products_names)
-
+        
         # Формируем промпт для ИИ
         instructions = []
+        total_required = 0
         for category in DISH_CATEGORIES:
             count = category_counts.get(category, 0)
             if count > 0:
-                instructions.append(f"выбери ровно {count} продукт(ов) для категории '{category}'")
-
+                instructions.append(f"выбери ровно {count} продукт(ов) из списка для категории '{category}'")
+                total_required += count
+        
         system_message = (
             f"Ты помощник по подбору еды для Smart Food Ecosystem. "
             f"Тебе дан список названий доступных продуктов. "
-            f"Проанализируй запрос пользователя и выполни следующие инструкции: "
+            f"Выбери продукты ТОЛЬКО из этого списка, строго следуя инструкциям: "
             f"{'; '.join(instructions)}. "
-            f"Учитывай теги: {', '.join(tags) if tags else 'нет тегов'}. "
+            f"Учитывай теги: {', '.join(tags) if tags else 'нет тегов'} (если тег не указан, игнорируй его; используй логику для соответствия). "
             f"Учитывай пожелания: '{wishes}' (если пусто, игнорируй). "
             f"Ответ должен быть СТРОГО в формате JSON: "
-            f"\"message\": \"строка с описанием\", \"products\": [{{\"name\": \"название продукта\", \"img\": \"URL изображения\", \"store\": \"название магазина\"}}, ...]}}. "
-            f"Не добавляй лишний текст вне JSON, только сам JSON-объект."
+            f"\"message\": \"Подобраны продукты\", \"products\": [{{\"name\": \"название продукта\", \"img\": \"URL изображения\"}}, ...]}}. "
+            f"Возвращай ровно {total_required} продуктов, не больше и не меньше. Если не можешь найти продукт, выбери подходящий из списка."
         )
         user_prompt = (
             f"Запрос пользователя: {user_message}\n"
             f"Список всех продуктов:\n{db_products_str}\n\n"
             f"Выбери продукты согласно инструкциям выше и верни их в формате JSON."
         )
+        print("Prompt length:", len(user_prompt))
 
+        # Отправляем запрос к Mistral
         chat_response = client.chat.complete(
             model=model,
             messages=[
@@ -97,36 +101,48 @@ def make_dish():
             ]
         )
         response_text = chat_response.choices[0].message.content.strip()
+        print("Raw AI response:", response_text)
 
         cleaned_response = re.sub(r'```json\s*|\s*```', '', response_text).strip()
         result = json.loads(cleaned_response)
+        print("Parsed AI response:", result)
 
         if not isinstance(result, dict) or "message" not in result or "products" not in result:
             return jsonify({"error": "Ошибка: Некорректный формат ответа от ИИ."}), 500
 
-        # Фильтруем продукты из базы данных
+        # Фильтруем и дополняем продукты из базы
         matched_products = []
         for ai_product in result["products"]:
             for db_product in db_products:
                 if db_product["name"].lower() == str(ai_product["name"]).lower():
                     matched_products.append({
                         "name": db_product["name"],
-                        "img": db_product.get("img", ""),
-                        "store": db_product.get("store", "")
+                        "img": db_product.get("img", "")
                     })
                     break
 
-        total_required = sum(category_counts.values())
+        # Если ИИ вернул меньше, чем нужно, дополняем случайными продуктами
         if len(matched_products) < total_required:
-            return jsonify({"error": f"Ошибка: ИИ вернул меньше продуктов ({len(matched_products)}), чем требуется ({total_required})."}), 500
+            print(f"AI returned {len(matched_products)} products, required {total_required}. Adding fallback products.")
+            remaining = total_required - len(matched_products)
+            available_products = [p for p in db_products if p["name"] not in [m["name"] for m in matched_products]]
+            if available_products:
+                random_products = random.sample(available_products, min(remaining, len(available_products)))
+                for p in random_products:
+                    matched_products.append({
+                        "name": p["name"],
+                        "img": p.get("img", "")
+                    })
 
         final_result = {
             "message": result["message"],
             "products": matched_products[:total_required]
         }
+        print("Returning:", final_result)
         return jsonify(final_result)
 
     except Exception as e:
+        print(f"Error occurred: {str(e)}")
         return jsonify({"error": f"Произошла ошибка: {str(e)}"}), 500
 
 if __name__ == '__main__':
