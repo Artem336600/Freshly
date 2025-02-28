@@ -1,4 +1,4 @@
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, make_response
 from flask_cors import CORS
 import json
 import re
@@ -20,12 +20,23 @@ model = "mistral-small-latest"
 client = Mistral(api_key=api_key)
 
 app = Flask(__name__)
-CORS(app)  # Разрешаем CORS для доступа с внешнего фронтенда
+CORS(app, resources={r"/make_prod": {"origins": "*"}})
 
 DISH_CATEGORIES = ["Закуски", "Супы", "Основные блюда", "Гарниры", "Десерты", "Напитки", "Салаты", "Блюда на гриле"]
 
-@app.route('/make_prod', methods=['POST'])
+# Добавляем заголовки CORS вручную для надёжности
+@app.after_request
+def add_cors_headers(response):
+    response.headers['Access-Control-Allow-Origin'] = '*'
+    response.headers['Access-Control-Allow-Methods'] = 'POST, OPTIONS'
+    response.headers['Access-Control-Allow-Headers'] = 'Content-Type'
+    return response
+
+@app.route('/make_prod', methods=['POST', 'OPTIONS'])
 def make_dish():
+    if request.method == 'OPTIONS':
+        return make_response('', 200)
+
     try:
         data = request.get_json()
         user_message = data.get('message')
@@ -93,14 +104,15 @@ def make_dish():
                     )
                 except TimeoutException as e:
                     print(f"Timeout waiting for search results for '{user_product}': {str(e)}")
-                    matched_products.append({
+                    product_data = {
                         "name": user_product,
                         "category": category,
                         "price": "Цена не найдена",
                         "description": "Описание отсутствует",
                         "image": "https://via.placeholder.com/150"
-                    })
-                    print(f"Product: '{user_product}' - Image URL: https://via.placeholder.com/150 (search timeout)")
+                    }
+                    matched_products.append(product_data)
+                    print(f"Product info: {json.dumps(product_data, ensure_ascii=False)}")
                     continue
 
                 try:
@@ -141,29 +153,32 @@ def make_dish():
                         )
                         image = image_container.find_element(By.TAG_NAME, "img")
                         img_src = image.get_attribute("src")
-                        print(f"Product: '{link_text}' - Image URL: {img_src}")
                     except TimeoutException as e:
-                        print(f"Product: '{link_text}' - Image URL: {img_src} (image not found, timeout: {str(e)})")
+                        print(f"Image not found for '{link_text}', timeout: {str(e)}")
                     except Exception as e:
-                        print(f"Product: '{link_text}' - Image URL: {img_src} (error: {str(e)})")
+                        print(f"Error finding image for '{link_text}': {str(e)}")
 
-                    matched_products.append({
+                    product_data = {
                         "name": link_text,
                         "category": category,
                         "price": price,
                         "description": description,
                         "image": img_src
-                    })
+                    }
+                    matched_products.append(product_data)
+                    print(f"Product info: {json.dumps(product_data, ensure_ascii=False)}")
+
                 except Exception as e:
                     print(f"Ошибка при поиске '{user_product}': {str(e)}")
-                    matched_products.append({
+                    product_data = {
                         "name": user_product,
                         "category": category,
                         "price": "Цена не найдена",
                         "description": "Описание отсутствует",
                         "image": "https://via.placeholder.com/150"
-                    })
-                    print(f"Product: '{user_product}' - Image URL: https://via.placeholder.com/150 (search error)")
+                    }
+                    matched_products.append(product_data)
+                    print(f"Product info: {json.dumps(product_data, ensure_ascii=False)}")
 
             final_result = {
                 "message": "Подобраны продукты с сайта Яндекс Лавка",
