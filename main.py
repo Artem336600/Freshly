@@ -3,10 +3,10 @@ from flask_cors import CORS
 import os
 import json
 import re
+import random
 from supabase import create_client
 from mistralai import Mistral
 
-# Данные для подключения к Supabase (обновите ключ!)
 SUPABASE_URL = "https://rgyhaiaecqusymobdqdd.supabase.co"
 SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJneWhhaWFlY3F1c3ltb2JkcWRkIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTczODI0NjkyOCwiZXhwIjoyMDUzODIyOTI4fQ.oZe5DEPVuSCAzeKZxLInsF8iJWXBEGS9I9H6gGMBlmc"  # Замените на актуальный ключ
 api_key = 'smKrnj6cMHni2QSNHZjIBInPlyErMHSu'
@@ -28,10 +28,13 @@ def get_products():
         print(f"Error fetching products: {str(e)}")
         raise
 
-def find_similar_product(requested_name, category, available_products, used_products):
-    """Ищет похожий продукт по названию или описанию."""
+def find_similar_product(requested_name, category, available_products, used_products, wishes=""):
+    """Ищет похожий продукт по названию, описанию или тематике пожеланий."""
     keywords = requested_name.lower().split()
+    wish_keywords = wishes.lower().split() if wishes else []
     fallback_candidates = []
+
+    # Сначала ищем по ключевым словам из названия
     for p in available_products:
         if p["name"] in used_products:
             continue
@@ -39,7 +42,9 @@ def find_similar_product(requested_name, category, available_products, used_prod
         desc_lower = p.get("description", "").lower()
         if any(kw in name_lower or kw in desc_lower for kw in keywords):
             fallback_candidates.append(p)
-    if not fallback_candidates and category:  # Если нет прямого совпадения, ищем по категории
+
+    # Если ничего не найдено, ищем по категории
+    if not fallback_candidates and category:
         category_keywords = category.lower().split()
         for p in available_products:
             if p["name"] in used_products:
@@ -48,6 +53,19 @@ def find_similar_product(requested_name, category, available_products, used_prod
             desc_lower = p.get("description", "").lower()
             if any(kw in name_lower or kw in desc_lower for kw in category_keywords):
                 fallback_candidates.append(p)
+
+    # Если есть пожелания (например, "Русская еда"), ищем по ним
+    if not fallback_candidates and wish_keywords:
+        for p in available_products:
+            if p["name"] in used_products:
+                continue
+            name_lower = p["name"].lower()
+            desc_lower = p.get("description", "").lower()
+            if any(kw in name_lower or kw in desc_lower for kw in wish_keywords):
+                if "русская" in wish_keywords.lower() and "француз" not in name_lower:  # Исключаем "по-французски"
+                    fallback_candidates.append(p)
+
+    # Возвращаем лучший кандидат или случайный из оставшихся
     return random.choice(fallback_candidates) if fallback_candidates else None
 
 @app.route('/make_prod', methods=['POST'])
@@ -79,7 +97,11 @@ def make_dish():
             elif "Пожелания:" in line:
                 wishes = line.split("Пожелания:")[1].strip()
 
-        # Формируем промпт для ИИ (без списка продуктов)
+        db_products = get_products()
+        if not db_products:
+            return jsonify({"error": "База данных пуста."}), 404
+
+        # Формируем промпт для ИИ
         instructions = []
         total_required = 0
         for category in DISH_CATEGORIES:
@@ -93,10 +115,10 @@ def make_dish():
             f"Сформируй продуктовые наборы на основе запроса пользователя, не зная доступных продуктов. "
             f"Следуй этим инструкциям: {'; '.join(instructions)}. "
             f"Учитывай теги: {', '.join(tags) if tags else 'нет тегов'} (применяй логику соответствия). "
-            f"Учитывай пожелания: '{wishes}' (если пусто, игнорируй). "
+            f"Учитывай пожелания: '{wishes}' (например, если 'Русская еда', предлагай блюда русской кухни; если пусто, игнорируй). "
             f"Ответ должен быть СТРОГО в формате JSON: "
             f"\"message\": \"Подобраны продукты\", \"products\": [{{\"name\": \"название продукта\", \"category\": \"категория\"}}, ...]}}. "
-            f"Возвращай ровно {total_required} продуктов, придумывая их названия на основе категорий, тегов и пожеланий."
+            f"Возвращай не менее {total_required * 2} продуктов, чтобы дать больше вариантов для выбора."
         )
         user_prompt = f"Запрос пользователя: {user_message}"
         print("Prompt length:", len(user_prompt))
@@ -119,22 +141,16 @@ def make_dish():
         if not isinstance(result, dict) or "message" not in result or "products" not in result:
             return jsonify({"error": "Ошибка: Некорректный формат ответа от ИИ."}), 500
 
-        # Получаем продукты из базы
-        db_products = get_products()
-        if not db_products:
-            return jsonify({"error": "База данных пуста."}), 404
-
-        db_products_dict = {p["name"].lower(): p for p in db_products}
+        # Подбираем реальные продукты или замены
         matched_products = []
         used_product_names = set()
+        db_products_dict = {p["name"].lower(): p for p in db_products}
 
-        # Подбираем реальные продукты или замены
         for ai_product in result["products"]:
             requested_name = ai_product["name"]
             category = ai_product["category"]
             product_name_lower = requested_name.lower()
 
-            # Проверяем, есть ли точное совпадение
             if product_name_lower in db_products_dict and product_name_lower not in used_product_names:
                 db_product = db_products_dict[product_name_lower]
                 matched_products.append({
@@ -143,25 +159,29 @@ def make_dish():
                 })
                 used_product_names.add(product_name_lower)
             else:
-                # Ищем похожий продукт
                 available_products = [p for p in db_products if p["name"].lower() not in used_product_names]
-                similar_product = find_similar_product(requested_name, category, available_products, used_product_names)
+                similar_product = find_similar_product(requested_name, category, available_products, used_product_names, wishes)
                 if similar_product:
                     matched_products.append({
                         "name": similar_product["name"],
                         "img": similar_product.get("img", "")
                     })
                     used_product_names.add(similar_product["name"].lower())
-                else:
-                    # Если нет похожего, берем случайный
-                    remaining = [p for p in db_products if p["name"].lower() not in used_product_names]
-                    if remaining:
-                        random_product = random.choice(remaining)
-                        matched_products.append({
-                            "name": random_product["name"],
-                            "img": random_product.get("img", "")
-                        })
-                        used_product_names.add(random_product["name"].lower())
+            if len(matched_products) >= total_required:
+                break
+
+        # Если всё ещё не хватает продуктов
+        if len(matched_products) < total_required:
+            print(f"Matched {len(matched_products)} products, required {total_required}. Adding fallback.")
+            remaining = total_required - len(matched_products)
+            available_products = [p for p in db_products if p["name"].lower() not in used_product_names]
+            if available_products:
+                random_products = random.sample(available_products, min(remaining, len(available_products)))
+                for p in random_products:
+                    matched_products.append({
+                        "name": p["name"],
+                        "img": p.get("img", "")
+                    })
 
         final_result = {
             "message": "Подобраны продукты из доступных вариантов",
