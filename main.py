@@ -7,7 +7,7 @@ from mistralai import Mistral
 
 # Данные для подключения к Supabase
 SUPABASE_URL = "https://rgyhaiaecqusymobdqdd.supabase.co"
-SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJneWhhaWFlY3F1c3ltb2JkcWRkIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTczODI0NjkyOCwiZXhwIjoyMDUzODIyOTI4fQ.oZe5DEPVuSCAzeKZxLInsF8iJWXBEGS9I9H6gGMBlmc"
+SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJneWhhaWFlY3F1c3ltb2JkcWRkIiwicm9sZSI6InNlcnZpY6Vfcm9sZSIsImlhdCI6MTczODI0NjkyOCwiZXhwIjoyMDUzODIyOTI4fQ.oZe5DEPVuSCAzeKZxLInsF8iJWXBEGS9I9H6gGMBlmc"
 api_key = 'smKrnj6cMHni2QSNHZjIBInPlyErMHSu'
 model = "mistral-small-latest"
 client = Mistral(api_key=api_key)
@@ -42,24 +42,25 @@ def make_dish():
             print("No products in DB")
             return jsonify({"error": "База данных пуста."}), 404
 
-        # Ограничиваем список продуктов для ИИ (например, первые 50)
+        # Ограничиваем список продуктов для ИИ (до 50)
         db_products_limited = db_products[:50]
         db_products_str = "\n".join([f"{p['name']} (id: {p['id']})" for p in db_products_limited])
         print("Limited products for AI:", db_products_str)
         
-        # Формируем промпт для ИИ
+        # Формируем строгий промпт для ИИ
         system_message = (
             "Ты помощник, который составляет набор продуктов на основе запроса пользователя. "
-            "Тебе предоставлен список всех доступных продуктов. "
+            "Тебе дан список всех доступных продуктов. "
             "Проанализируй запрос пользователя и выбери из списка только те продукты, "
             "которые подходят для указанной темы или блюда. "
-            "Верни только подходящие продукты в формате JSON: "
-            "{\"message\": \"...\", \"products\": [{\"id\": ..., \"name\": \"...\"}, ...]}."
+            "Ответ должен быть СТРОГО в формате JSON: "
+            "{\"message\": \"строка с описанием\", \"products\": [{\"id\": число, \"name\": \"строка\"}, ...]}. "
+            "Не добавляй лишний текст вне JSON, только сам JSON-объект."
         )
         user_prompt = (
             f"Запрос пользователя: {user_message}\n"
             f"Список всех продуктов:\n{db_products_str}\n\n"
-            "Выбери подходящие продукты и верни их в формате JSON."
+            "Выбери подходящие продукты и верни их в формате JSON, как указано выше."
         )
         print("Prompt length:", len(user_prompt))
 
@@ -72,8 +73,8 @@ def make_dish():
                     {"role": "user", "content": user_prompt}
                 ]
             )
-            response_text = chat_response.choices[0].message.content
-            print("AI response:", response_text)
+            response_text = chat_response.choices[0].message.content.strip()
+            print("Raw AI response:", response_text)
         except Exception as e:
             print(f"Error calling Mistral API: {str(e)}")
             return jsonify({"error": f"Ошибка при обращении к ИИ: {str(e)}"}), 500
@@ -84,7 +85,22 @@ def make_dish():
             print("Parsed AI response:", result)
         except json.JSONDecodeError as e:
             print(f"Error parsing AI response as JSON: {str(e)}")
-            return jsonify({"error": "Ошибка: ИИ вернул некорректный формат ответа."}), 500
+            # Попытка извлечь данные вручную, если JSON невалиден
+            if "message" in response_text and "products" in response_text:
+                try:
+                    # Грубый парсинг для извлечения JSON-подобной структуры
+                    import re
+                    json_match = re.search(r'\{.*\}', response_text, re.DOTALL)
+                    if json_match:
+                        result = json.loads(json_match.group(0))
+                        print("Manually parsed AI response:", result)
+                    else:
+                        raise ValueError("No JSON-like structure found")
+                except Exception as manual_e:
+                    print(f"Manual parsing failed: {str(manual_e)}")
+                    return jsonify({"error": f"Ошибка: ИИ вернул некорректный JSON: {response_text}"}), 500
+            else:
+                return jsonify({"error": f"Ошибка: ИИ вернул некорректный JSON: {response_text}"}), 500
 
         # Проверяем формат результата
         if not isinstance(result, dict) or "message" not in result or "products" not in result:
