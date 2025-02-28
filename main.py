@@ -50,7 +50,6 @@ def make_dish():
             logger.warning("No message provided")
             return jsonify({"error": "Ошибка: Введите вопрос."}), 400
 
-        # Формируем промпт для ИИ
         system_message = (
             f"Ты помощник по подбору еды для Smart Food Ecosystem. "
             f"На основе запроса пользователя сформируй продуктовый набор, придумывая названия продуктов. "
@@ -63,7 +62,6 @@ def make_dish():
         user_prompt = f"Запрос пользователя: {user_message}"
         logger.info(f"Prompt length: {len(user_prompt)}")
 
-        # Отправляем запрос к Mistral
         chat_response = client.chat.complete(
             model=model,
             messages=[
@@ -88,6 +86,7 @@ def make_dish():
         chrome_options.add_argument("--no-sandbox")
         chrome_options.add_argument("--disable-dev-shm-usage")
         chrome_options.add_argument("--disable-gpu")
+        chrome_options.add_argument("user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36")  # Имитация браузера
         try:
             driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=chrome_options)
             logger.info("Chromedriver initialized successfully")
@@ -105,8 +104,9 @@ def make_dish():
                 logger.info(f"Searching for: {user_product} at {search_url}")
                 driver.get(search_url)
                 try:
-                    WebDriverWait(driver, 10).until(
-                        EC.presence_of_element_located((By.CLASS_NAME, "cbuk31w"))
+                    # Увеличиваем тайм-аут до 20 секунд и пробуем более общий селектор
+                    WebDriverWait(driver, 20).until(
+                        EC.presence_of_element_located((By.CSS_SELECTOR, "[class*='search-result']"))
                     )
                 except TimeoutException as e:
                     logger.warning(f"Timeout waiting for search results for '{user_product}': {str(e)}")
@@ -122,39 +122,41 @@ def make_dish():
                     continue
 
                 try:
-                    element = driver.find_element(By.CLASS_NAME, "cbuk31w.pyi2ep2.l1ucbhj1.v1y5jj7x")
-                    link_element = element.find_element(By.CLASS_NAME, "p11oed5n.d1sn7zca")
+                    # Обновляем селекторы на более общие
+                    element = driver.find_element(By.CSS_SELECTOR, "[class*='search-result-item']")
+                    link_element = element.find_element(By.TAG_NAME, "a")
                     link_href = link_element.get_attribute("href")
                     full_url = link_href if link_href.startswith("https://") else f"https://lavka.yandex.ru{link_href}"
-                    link_text = link_element.find_element(By.CLASS_NAME, "l4t8cc8.a1dq5c6d").text
+                    link_text = link_element.find_element(By.CSS_SELECTOR, "[class*='title']").text
 
                     logger.info(f"Navigating to product page: {full_url}")
                     driver.get(full_url)
-                    WebDriverWait(driver, 10).until(
-                        EC.presence_of_element_located((By.CLASS_NAME, "c17r1xrr"))
+                    WebDriverWait(driver, 20).until(
+                        EC.presence_of_element_located((By.CSS_SELECTOR, "[class*='product-details']"))
                     )
 
-                    product_elements = driver.find_elements(By.CLASS_NAME, "c17r1xrr")
                     price = "Цена не найдена"
+                    try:
+                        price_element = driver.find_element(By.CSS_SELECTOR, "[class*='price']")
+                        price_text = price_element.text
+                        price_match = re.search(r'(\d+\s*₽)', price_text)
+                        price = price_match.group(1) if price_match else "Цена не найдена"
+                    except Exception as e:
+                        logger.warning(f"Price not found for '{link_text}': {str(e)}")
+
                     description = "Описание отсутствует"
-                    if product_elements:
-                        for elem in product_elements:
-                            text_content = elem.text
-                            price_match = re.search(r'(\d+\s*₽)', text_content)
-                            if price_match:
-                                price = price_match.group(1)
-                            text_cleaned = re.sub(r'.*₽.*$', '', text_content, flags=re.MULTILINE).strip()
-                            text_cleaned = re.sub(r'В корзину', '', text_cleaned).strip()
-                            if text_cleaned:
-                                description = text_cleaned
+                    try:
+                        desc_element = driver.find_element(By.CSS_SELECTOR, "[class*='description']")
+                        description = desc_element.text.strip()
+                    except Exception as e:
+                        logger.warning(f"Description not found for '{link_text}': {str(e)}")
 
                     img_src = "https://via.placeholder.com/150"
                     try:
-                        image_container = WebDriverWait(driver, 10).until(
-                            EC.presence_of_element_located((By.CLASS_NAME, "ibhxbmx.p1wkliaw"))
+                        image_container = WebDriverWait(driver, 20).until(
+                            EC.presence_of_element_located((By.CSS_SELECTOR, "[class*='image-container'] img"))
                         )
-                        image = image_container.find_element(By.TAG_NAME, "img")
-                        img_src = image.get_attribute("src")
+                        img_src = image_container.get_attribute("src")
                     except TimeoutException as e:
                         logger.warning(f"Image not found for '{link_text}', timeout: {str(e)}")
                     except Exception as e:
