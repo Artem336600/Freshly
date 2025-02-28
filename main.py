@@ -20,7 +20,7 @@ model = "mistral-small-latest"
 client = Mistral(api_key=api_key)
 
 app = Flask(__name__)
-CORS(app)
+CORS(app)  # Разрешаем CORS для доступа с внешнего фронтенда
 
 DISH_CATEGORIES = ["Закуски", "Супы", "Основные блюда", "Гарниры", "Десерты", "Напитки", "Салаты", "Блюда на гриле"]
 
@@ -70,7 +70,7 @@ def make_dish():
         chrome_options.add_argument("--headless")
         chrome_options.add_argument("--no-sandbox")
         chrome_options.add_argument("--disable-dev-shm-usage")
-        chrome_options.add_argument("--disable-gpu")  # Дополнительная опция для стабильности
+        chrome_options.add_argument("--disable-gpu")
         try:
             driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=chrome_options)
         except WebDriverException as e:
