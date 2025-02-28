@@ -2,6 +2,7 @@ from flask import Flask, request, jsonify
 from flask_cors import CORS
 import os
 import json
+import re
 from supabase import create_client
 from mistralai import Mistral
 
@@ -80,9 +81,11 @@ def make_dish():
             print(f"Error calling Mistral API: {str(e)}")
             return jsonify({"error": f"Ошибка при обращении к ИИ: {str(e)}"}), 500
 
-        # Парсим ответ ИИ как JSON
+        # Очищаем ответ от лишнего текста и извлекаем JSON
         try:
-            result = json.loads(response_text)
+            # Удаляем ```json и ```, если они есть
+            cleaned_response = re.sub(r'```json\s*|\s*```', '', response_text).strip()
+            result = json.loads(cleaned_response)
             print("Parsed AI response:", result)
         except json.JSONDecodeError as e:
             print(f"Error parsing AI response as JSON: {str(e)}")
