@@ -5,9 +5,9 @@ import json
 from supabase import create_client
 from mistralai import Mistral
 
-# Данные для подключения к Supabase
+# Данные для подключения к Supabase (обновите ключ!)
 SUPABASE_URL = "https://rgyhaiaecqusymobdqdd.supabase.co"
-SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJneWhhaWFlY3F1c3ltb2JkcWRkIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTczODI0NjkyOCwiZXhwIjoyMDUzODIyOTI4fQ.oZe5DEPVuSCAzeKZxLInsF8iJWXBEGS9I9H6gGMBlmc"
+SUPABASE_KEY = "ваш_новый_service_role_ключ_из_supabase"  # Замените на актуальный ключ
 api_key = 'smKrnj6cMHni2QSNHZjIBInPlyErMHSu'
 model = "mistral-small-latest"
 client = Mistral(api_key=api_key)
@@ -42,20 +42,21 @@ def make_dish():
             print("No products in DB")
             return jsonify({"error": "База данных пуста."}), 404
 
-        # Ограничиваем список продуктов для ИИ (до 50)
-        db_products_limited = db_products[:50]
-        db_products_str = "\n".join([f"{p['name']} (id: {p['id']})" for p in db_products_limited])
-        print("Limited products for AI:", db_products_str)
+        # Формируем список только с названиями продуктов для ИИ (без id)
+        db_products_names = [p["name"] for p in db_products[:50]]  # Ограничиваем до 50
+        db_products_str = "\n".join(db_products_names)
+        print("Product names for AI:", db_products_str)
         
         # Формируем строгий промпт для ИИ
         system_message = (
             "Ты помощник, который составляет набор продуктов на основе запроса пользователя. "
-            "Тебе дан список всех доступных продуктов. "
+            "Тебе дан список названий доступных продуктов. "
             "Проанализируй запрос пользователя и выбери из списка только те продукты, "
             "которые подходят для указанной темы или блюда. "
             "Ответ должен быть СТРОГО в формате JSON: "
-            "{\"message\": \"строка с описанием\", \"products\": [{\"id\": число, \"name\": \"строка\"}, ...]}. "
-            "Не добавляй лишний текст вне JSON, только сам JSON-объект."
+            "{\"message\": \"строка с описанием\", \"products\": [\"название продукта\", ...]}. "
+            "Не добавляй лишний текст вне JSON, только сам JSON-объект. "
+            "Возвращай только названия продуктов без дополнительных данных."
         )
         user_prompt = (
             f"Запрос пользователя: {user_message}\n"
@@ -85,40 +86,23 @@ def make_dish():
             print("Parsed AI response:", result)
         except json.JSONDecodeError as e:
             print(f"Error parsing AI response as JSON: {str(e)}")
-            # Попытка извлечь данные вручную, если JSON невалиден
-            if "message" in response_text and "products" in response_text:
-                try:
-                    # Грубый парсинг для извлечения JSON-подобной структуры
-                    import re
-                    json_match = re.search(r'\{.*\}', response_text, re.DOTALL)
-                    if json_match:
-                        result = json.loads(json_match.group(0))
-                        print("Manually parsed AI response:", result)
-                    else:
-                        raise ValueError("No JSON-like structure found")
-                except Exception as manual_e:
-                    print(f"Manual parsing failed: {str(manual_e)}")
-                    return jsonify({"error": f"Ошибка: ИИ вернул некорректный JSON: {response_text}"}), 500
-            else:
-                return jsonify({"error": f"Ошибка: ИИ вернул некорректный JSON: {response_text}"}), 500
+            return jsonify({"error": f"Ошибка: ИИ вернул некорректный JSON: {response_text}"}), 500
 
         # Проверяем формат результата
         if not isinstance(result, dict) or "message" not in result or "products" not in result:
             print("Invalid AI response format")
             return jsonify({"error": "Ошибка: Некорректный формат ответа от ИИ."}), 500
 
-        # Фильтруем продукты из базы данных
-        matched_products = []
-        for ai_product in result["products"]:
-            for db_product in db_products:
-                if str(db_product["id"]) == str(ai_product.get("id", "")) or db_product["name"].lower() == str(ai_product.get("name", "")).lower():
-                    matched_products.append(db_product)
-                    break
+        # Проверяем, что все продукты в ответе ИИ есть в базе данных
+        matched_product_names = []
+        for ai_product_name in result["products"]:
+            if any(db_product["name"].lower() == str(ai_product_name).lower() for db_product in db_products):
+                matched_product_names.append(ai_product_name)
         
-        # Формируем итоговый результат
+        # Формируем итоговый результат (только названия)
         final_result = {
             "message": result["message"],
-            "products": matched_products
+            "products": matched_product_names
         }
         print("Returning:", final_result)
         response = jsonify(final_result)
