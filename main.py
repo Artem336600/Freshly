@@ -4,6 +4,7 @@ import json
 import re
 import time
 import os
+import logging
 from mistralai import Mistral
 from selenium import webdriver
 from selenium.webdriver.common.by import By
@@ -13,6 +14,10 @@ from webdriver_manager.chrome import ChromeDriverManager
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.common.exceptions import TimeoutException, WebDriverException
+
+# Настройка логирования
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+logger = logging.getLogger(__name__)
 
 # Данные для подключения к Mistral
 api_key = 'smKrnj6cMHni2QSNHZjIBInPlyErMHSu'
@@ -24,7 +29,6 @@ CORS(app, resources={r"/make_prod": {"origins": "*"}})
 
 DISH_CATEGORIES = ["Закуски", "Супы", "Основные блюда", "Гарниры", "Десерты", "Напитки", "Салаты", "Блюда на гриле"]
 
-# Добавляем заголовки CORS вручную для надёжности
 @app.after_request
 def add_cors_headers(response):
     response.headers['Access-Control-Allow-Origin'] = '*'
@@ -40,9 +44,10 @@ def make_dish():
     try:
         data = request.get_json()
         user_message = data.get('message')
-        print("Received message:", user_message)
+        logger.info(f"Received message: {user_message}")
         
         if not user_message:
+            logger.warning("No message provided")
             return jsonify({"error": "Ошибка: Введите вопрос."}), 400
 
         # Формируем промпт для ИИ
@@ -56,7 +61,7 @@ def make_dish():
             f"Если категорий нет, возвращай минимум 3 продукта."
         )
         user_prompt = f"Запрос пользователя: {user_message}"
-        print("Prompt length:", len(user_prompt))
+        logger.info(f"Prompt length: {len(user_prompt)}")
 
         # Отправляем запрос к Mistral
         chat_response = client.chat.complete(
@@ -67,13 +72,14 @@ def make_dish():
             ]
         )
         response_text = chat_response.choices[0].message.content.strip()
-        print("Raw AI response:", response_text)
+        logger.info(f"Raw AI response: {response_text}")
 
         cleaned_response = re.sub(r'```json\s*|\s*```', '', response_text).strip()
         ai_result = json.loads(cleaned_response)
-        print("Parsed AI response:", ai_result)
+        logger.info(f"Parsed AI response: {json.dumps(ai_result, ensure_ascii=False)}")
 
         if not isinstance(ai_result, dict) or "message" not in ai_result or "products" not in ai_result:
+            logger.error("Invalid AI response format")
             return jsonify({"error": "Ошибка: Некорректный формат ответа от ИИ."}), 500
 
         # Настройка веб-драйвера
@@ -84,26 +90,26 @@ def make_dish():
         chrome_options.add_argument("--disable-gpu")
         try:
             driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=chrome_options)
+            logger.info("Chromedriver initialized successfully")
         except WebDriverException as e:
-            print(f"Failed to initialize chromedriver: {str(e)}")
+            logger.error(f"Failed to initialize chromedriver: {str(e)}")
             return jsonify({"error": f"Ошибка инициализации chromedriver: {str(e)}"}), 500
 
         try:
-            # Подбираем данные с сайта для каждого продукта
             matched_products = []
             for product in ai_result["products"]:
                 user_product = product["name"]
                 category = product["category"]
                 search_url = f"https://lavka.yandex.ru/search?text={user_product}"
                 
-                print(f"Searching for: {user_product} at {search_url}")
+                logger.info(f"Searching for: {user_product} at {search_url}")
                 driver.get(search_url)
                 try:
                     WebDriverWait(driver, 10).until(
                         EC.presence_of_element_located((By.CLASS_NAME, "cbuk31w"))
                     )
                 except TimeoutException as e:
-                    print(f"Timeout waiting for search results for '{user_product}': {str(e)}")
+                    logger.warning(f"Timeout waiting for search results for '{user_product}': {str(e)}")
                     product_data = {
                         "name": user_product,
                         "category": category,
@@ -112,25 +118,22 @@ def make_dish():
                         "image": "https://via.placeholder.com/150"
                     }
                     matched_products.append(product_data)
-                    print(f"Product info: {json.dumps(product_data, ensure_ascii=False)}")
+                    logger.info(f"Product info: {json.dumps(product_data, ensure_ascii=False)}")
                     continue
 
                 try:
-                    # Находим первый элемент результата поиска
                     element = driver.find_element(By.CLASS_NAME, "cbuk31w.pyi2ep2.l1ucbhj1.v1y5jj7x")
                     link_element = element.find_element(By.CLASS_NAME, "p11oed5n.d1sn7zca")
                     link_href = link_element.get_attribute("href")
                     full_url = link_href if link_href.startswith("https://") else f"https://lavka.yandex.ru{link_href}"
                     link_text = link_element.find_element(By.CLASS_NAME, "l4t8cc8.a1dq5c6d").text
 
-                    # Переходим на страницу товара
-                    print(f"Navigating to product page: {full_url}")
+                    logger.info(f"Navigating to product page: {full_url}")
                     driver.get(full_url)
                     WebDriverWait(driver, 10).until(
                         EC.presence_of_element_located((By.CLASS_NAME, "c17r1xrr"))
                     )
 
-                    # Извлекаем цену и описание
                     product_elements = driver.find_elements(By.CLASS_NAME, "c17r1xrr")
                     price = "Цена не найдена"
                     description = "Описание отсутствует"
@@ -145,7 +148,6 @@ def make_dish():
                             if text_cleaned:
                                 description = text_cleaned
 
-                    # Извлекаем изображение
                     img_src = "https://via.placeholder.com/150"
                     try:
                         image_container = WebDriverWait(driver, 10).until(
@@ -154,9 +156,9 @@ def make_dish():
                         image = image_container.find_element(By.TAG_NAME, "img")
                         img_src = image.get_attribute("src")
                     except TimeoutException as e:
-                        print(f"Image not found for '{link_text}', timeout: {str(e)}")
+                        logger.warning(f"Image not found for '{link_text}', timeout: {str(e)}")
                     except Exception as e:
-                        print(f"Error finding image for '{link_text}': {str(e)}")
+                        logger.error(f"Error finding image for '{link_text}': {str(e)}")
 
                     product_data = {
                         "name": link_text,
@@ -166,10 +168,10 @@ def make_dish():
                         "image": img_src
                     }
                     matched_products.append(product_data)
-                    print(f"Product info: {json.dumps(product_data, ensure_ascii=False)}")
+                    logger.info(f"Product info: {json.dumps(product_data, ensure_ascii=False)}")
 
                 except Exception as e:
-                    print(f"Ошибка при поиске '{user_product}': {str(e)}")
+                    logger.error(f"Ошибка при поиске '{user_product}': {str(e)}")
                     product_data = {
                         "name": user_product,
                         "category": category,
@@ -178,20 +180,20 @@ def make_dish():
                         "image": "https://via.placeholder.com/150"
                     }
                     matched_products.append(product_data)
-                    print(f"Product info: {json.dumps(product_data, ensure_ascii=False)}")
+                    logger.info(f"Product info: {json.dumps(product_data, ensure_ascii=False)}")
 
             final_result = {
                 "message": "Подобраны продукты с сайта Яндекс Лавка",
                 "products": matched_products
             }
-            print("Returning:", final_result)
+            logger.info(f"Returning: {json.dumps(final_result, ensure_ascii=False)}")
             return jsonify(final_result)
 
         finally:
             driver.quit()
 
     except Exception as e:
-        print(f"Error occurred: {str(e)}")
+        logger.error(f"Error occurred: {str(e)}")
         return jsonify({"error": f"Произошла ошибка: {str(e)}"}), 500
 
 if __name__ == '__main__':
