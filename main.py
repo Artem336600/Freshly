@@ -7,6 +7,7 @@ import random
 from supabase import create_client
 from mistralai import Mistral
 
+# Данные для подключения к Supabase (обновите ключ!)
 SUPABASE_URL = "https://rgyhaiaecqusymobdqdd.supabase.co"
 SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJneWhhaWFlY3F1c3ltb2JkcWRkIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTczODI0NjkyOCwiZXhwIjoyMDUzODIyOTI4fQ.oZe5DEPVuSCAzeKZxLInsF8iJWXBEGS9I9H6gGMBlmc"  # Замените на актуальный ключ
 api_key = 'smKrnj6cMHni2QSNHZjIBInPlyErMHSu'
@@ -61,8 +62,14 @@ def find_similar_product(requested_name, category, available_products, used_prod
                 continue
             name_lower = p["name"].lower()
             desc_lower = p.get("description", "").lower()
-            if any(kw in name_lower or kw in desc_lower for kw in wish_keywords):
-                if "русская" in wish_keywords.lower() and "француз" not in name_lower:  # Исключаем "по-французски"
+            # Проверяем каждое ключевое слово из пожеланий
+            matches_wishes = any(kw in name_lower or kw in desc_lower for kw in wish_keywords)
+            is_russian = any(kw in ["русская", "русский", "борщ", "пельмени", "щи"] for kw in wish_keywords)
+            if matches_wishes:
+                # Исключаем "французские" блюда, если запрос на "русскую" еду
+                if is_russian and "француз" not in name_lower:
+                    fallback_candidates.append(p)
+                elif not is_russian:
                     fallback_candidates.append(p)
 
     # Возвращаем лучший кандидат или случайный из оставшихся
@@ -170,7 +177,7 @@ def make_dish():
             if len(matched_products) >= total_required:
                 break
 
-        # Если всё ещё не хватает продуктов
+        # Если не хватает продуктов
         if len(matched_products) < total_required:
             print(f"Matched {len(matched_products)} products, required {total_required}. Adding fallback.")
             remaining = total_required - len(matched_products)
