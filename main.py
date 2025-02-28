@@ -3,7 +3,6 @@ from flask_cors import CORS
 import os
 import json
 import re
-import random
 from supabase import create_client
 from mistralai import Mistral
 
@@ -28,6 +27,28 @@ def get_products():
     except Exception as e:
         print(f"Error fetching products: {str(e)}")
         raise
+
+def find_similar_product(requested_name, category, available_products, used_products):
+    """Ищет похожий продукт по названию или описанию."""
+    keywords = requested_name.lower().split()
+    fallback_candidates = []
+    for p in available_products:
+        if p["name"] in used_products:
+            continue
+        name_lower = p["name"].lower()
+        desc_lower = p.get("description", "").lower()
+        if any(kw in name_lower or kw in desc_lower for kw in keywords):
+            fallback_candidates.append(p)
+    if not fallback_candidates and category:  # Если нет прямого совпадения, ищем по категории
+        category_keywords = category.lower().split()
+        for p in available_products:
+            if p["name"] in used_products:
+                continue
+            name_lower = p["name"].lower()
+            desc_lower = p.get("description", "").lower()
+            if any(kw in name_lower or kw in desc_lower for kw in category_keywords):
+                fallback_candidates.append(p)
+    return random.choice(fallback_candidates) if fallback_candidates else None
 
 @app.route('/make_prod', methods=['POST'])
 def make_dish():
@@ -58,39 +79,26 @@ def make_dish():
             elif "Пожелания:" in line:
                 wishes = line.split("Пожелания:")[1].strip()
 
-        db_products = get_products()
-        if not db_products:
-            return jsonify({"error": "База данных пуста."}), 404
-
-        db_products_names = [p["name"] for p in db_products]
-        db_products_str = "\n".join(db_products_names)
-        
-        # Формируем промпт для ИИ
+        # Формируем промпт для ИИ (без списка продуктов)
         instructions = []
         total_required = 0
         for category in DISH_CATEGORIES:
             count = category_counts.get(category, 0)
             if count > 0:
-                instructions.append(f"выбери ровно {count} продукт(ов) из списка для категории '{category}'")
+                instructions.append(f"{count} продукт(ов) для категории '{category}'")
                 total_required += count
         
         system_message = (
-            f"Ты помощник по подбору еды для Smart Food Ecosystem. "
-            f"При подборк блюд выкручивай стереотипы на максимум. "
-            f"Тебе дан список названий доступных продуктов. "
-            f"Выбери продукты ТОЛЬКО из этого списка, строго следуя инструкциям: "
-            f"{'; '.join(instructions)}. "
-            f"Учитывай теги: {', '.join(tags) if tags else 'нет тегов'} (если тег не указан, игнорируй его; используй логику для соответствия). "
+            f"Ты креативный помощник по подбору еды для Smart Food Ecosystem. "
+            f"Сформируй продуктовые наборы на основе запроса пользователя, не зная доступных продуктов. "
+            f"Следуй этим инструкциям: {'; '.join(instructions)}. "
+            f"Учитывай теги: {', '.join(tags) if tags else 'нет тегов'} (применяй логику соответствия). "
             f"Учитывай пожелания: '{wishes}' (если пусто, игнорируй). "
             f"Ответ должен быть СТРОГО в формате JSON: "
-            f"\"message\": \"Подобраны продукты\", \"products\": [{{\"name\": \"название продукта\", \"img\": \"URL изображения\"}}, ...]}}. "
-            f"Возвращай ровно {total_required} продуктов, не больше и не меньше. Если не можешь найти продукт, выбери подходящий из списка."
+            f"\"message\": \"Подобраны продукты\", \"products\": [{{\"name\": \"название продукта\", \"category\": \"категория\"}}, ...]}}. "
+            f"Возвращай ровно {total_required} продуктов, придумывая их названия на основе категорий, тегов и пожеланий."
         )
-        user_prompt = (
-            f"Запрос пользователя: {user_message}\n"
-            f"Список всех продуктов:\n{db_products_str}\n\n"
-            f"Выбери продукты согласно инструкциям выше и верни их в формате JSON."
-        )
+        user_prompt = f"Запрос пользователя: {user_message}"
         print("Prompt length:", len(user_prompt))
 
         # Отправляем запрос к Mistral
@@ -111,32 +119,52 @@ def make_dish():
         if not isinstance(result, dict) or "message" not in result or "products" not in result:
             return jsonify({"error": "Ошибка: Некорректный формат ответа от ИИ."}), 500
 
-        # Фильтруем и дополняем продукты из базы
-        matched_products = []
-        for ai_product in result["products"]:
-            for db_product in db_products:
-                if db_product["name"].lower() == str(ai_product["name"]).lower():
-                    matched_products.append({
-                        "name": db_product["name"],
-                        "img": db_product.get("img", "")
-                    })
-                    break
+        # Получаем продукты из базы
+        db_products = get_products()
+        if not db_products:
+            return jsonify({"error": "База данных пуста."}), 404
 
-        # Если ИИ вернул меньше, чем нужно, дополняем случайными продуктами
-        if len(matched_products) < total_required:
-            print(f"AI returned {len(matched_products)} products, required {total_required}. Adding fallback products.")
-            remaining = total_required - len(matched_products)
-            available_products = [p for p in db_products if p["name"] not in [m["name"] for m in matched_products]]
-            if available_products:
-                random_products = random.sample(available_products, min(remaining, len(available_products)))
-                for p in random_products:
+        db_products_dict = {p["name"].lower(): p for p in db_products}
+        matched_products = []
+        used_product_names = set()
+
+        # Подбираем реальные продукты или замены
+        for ai_product in result["products"]:
+            requested_name = ai_product["name"]
+            category = ai_product["category"]
+            product_name_lower = requested_name.lower()
+
+            # Проверяем, есть ли точное совпадение
+            if product_name_lower in db_products_dict and product_name_lower not in used_product_names:
+                db_product = db_products_dict[product_name_lower]
+                matched_products.append({
+                    "name": db_product["name"],
+                    "img": db_product.get("img", "")
+                })
+                used_product_names.add(product_name_lower)
+            else:
+                # Ищем похожий продукт
+                available_products = [p for p in db_products if p["name"].lower() not in used_product_names]
+                similar_product = find_similar_product(requested_name, category, available_products, used_product_names)
+                if similar_product:
                     matched_products.append({
-                        "name": p["name"],
-                        "img": p.get("img", "")
+                        "name": similar_product["name"],
+                        "img": similar_product.get("img", "")
                     })
+                    used_product_names.add(similar_product["name"].lower())
+                else:
+                    # Если нет похожего, берем случайный
+                    remaining = [p for p in db_products if p["name"].lower() not in used_product_names]
+                    if remaining:
+                        random_product = random.choice(remaining)
+                        matched_products.append({
+                            "name": random_product["name"],
+                            "img": random_product.get("img", "")
+                        })
+                        used_product_names.add(random_product["name"].lower())
 
         final_result = {
-            "message": result["message"],
+            "message": "Подобраны продукты из доступных вариантов",
             "products": matched_products[:total_required]
         }
         print("Returning:", final_result)
