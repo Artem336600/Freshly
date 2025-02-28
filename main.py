@@ -62,17 +62,14 @@ def find_similar_product(requested_name, category, available_products, used_prod
                 continue
             name_lower = p["name"].lower()
             desc_lower = p.get("description", "").lower()
-            # Проверяем каждое ключевое слово из пожеланий
             matches_wishes = any(kw in name_lower or kw in desc_lower for kw in wish_keywords)
             is_russian = any(kw in ["русская", "русский", "борщ", "пельмени", "щи"] for kw in wish_keywords)
             if matches_wishes:
-                # Исключаем "французские" блюда, если запрос на "русскую" еду
                 if is_russian and "француз" not in name_lower:
                     fallback_candidates.append(p)
                 elif not is_russian:
                     fallback_candidates.append(p)
 
-    # Возвращаем лучший кандидат или случайный из оставшихся
     return random.choice(fallback_candidates) if fallback_candidates else None
 
 @app.route('/make_prod', methods=['POST'])
@@ -162,7 +159,8 @@ def make_dish():
                 db_product = db_products_dict[product_name_lower]
                 matched_products.append({
                     "name": db_product["name"],
-                    "img": db_product.get("img", "")
+                    "img": db_product.get("img", ""),
+                    "description": db_product.get("description", "Описание отсутствует")  # Добавляем description
                 })
                 used_product_names.add(product_name_lower)
             else:
@@ -171,7 +169,8 @@ def make_dish():
                 if similar_product:
                     matched_products.append({
                         "name": similar_product["name"],
-                        "img": similar_product.get("img", "")
+                        "img": similar_product.get("img", ""),
+                        "description": similar_product.get("description", "Описание отсутствует")  # Добавляем description
                     })
                     used_product_names.add(similar_product["name"].lower())
             if len(matched_products) >= total_required:
@@ -187,7 +186,8 @@ def make_dish():
                 for p in random_products:
                     matched_products.append({
                         "name": p["name"],
-                        "img": p.get("img", "")
+                        "img": p.get("img", ""),
+                        "description": p.get("description", "Описание отсутствует")  # Добавляем description
                     })
 
         final_result = {
