@@ -15,11 +15,12 @@ RUN apt-get update && apt-get install -y \
     libxi6 \
     && rm -rf /var/lib/apt/lists/*
 
-# Устанавливаем Google Chrome с современным методом добавления ключей
+# Добавляем ключ и репозиторий Google Chrome
 RUN wget -q -O - https://dl.google.com/linux/linux_signing_key.pub > /usr/share/keyrings/google-chrome-keyring.gpg \
-    && echo "deb [arch=amd64 signed-by=/usr/share/keyrings/google-chrome-keyring.gpg] http://dl.google.com/linux/chrome/deb/ stable main" > /etc/apt/sources.list.d/google-chrome.list \
-    && apt-get update -y \
-    && apt-get install -y google-chrome-stable \
+    && echo "deb [arch=amd64 signed-by=/usr/share/keyrings/google-chrome-keyring.gpg] http://dl.google.com/linux/chrome/deb/ stable main" > /etc/apt/sources.list.d/google-chrome.list
+
+# Обновляем пакеты и устанавливаем Chrome
+RUN apt-get update -y && apt-get install -y google-chrome-stable \
     && rm -rf /var/lib/apt/lists/*
 
 # Устанавливаем рабочую директорию
@@ -35,4 +36,4 @@ RUN pip install --no-cache-dir -r requirements.txt
 EXPOSE 5000
 
 # Команда для запуска приложения
-CMD ["python", "app.py"]
+CMD ["python", "main.py"]
