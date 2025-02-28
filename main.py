@@ -7,7 +7,7 @@ from mistralai import Mistral
 
 # Данные для подключения к Supabase (обновите ключ!)
 SUPABASE_URL = "https://rgyhaiaecqusymobdqdd.supabase.co"
-SUPABASE_KEY = "ваш_новый_service_role_ключ_из_supabase"  # Замените на актуальный ключ
+SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJneWhhaWFlY3F1c3ltb2JkcWRkIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTczODI0NjkyOCwiZXhwIjoyMDUzODIyOTI4fQ.oZe5DEPVuSCAzeKZxLInsF8iJWXBEGS9I9H6gGMBlmc"  # Замените на актуальный ключ
 api_key = 'smKrnj6cMHni2QSNHZjIBInPlyErMHSu'
 model = "mistral-small-latest"
 client = Mistral(api_key=api_key)
