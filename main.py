@@ -3,6 +3,7 @@ from flask_cors import CORS
 import json
 import re
 import time
+import os
 from mistralai import Mistral
 from selenium import webdriver
 from selenium.webdriver.common.by import By
