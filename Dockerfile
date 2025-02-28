@@ -6,6 +6,7 @@ RUN apt-get update && apt-get install -y \
     wget \
     unzip \
     curl \
+    gnupg \
     libglib2.0-0 \
     libnss3 \
     libgconf-2-4 \
@@ -15,8 +16,8 @@ RUN apt-get update && apt-get install -y \
     libxi6 \
     && rm -rf /var/lib/apt/lists/*
 
-# Добавляем ключ и репозиторий Google Chrome
-RUN wget -q -O - https://dl.google.com/linux/linux_signing_key.pub > /usr/share/keyrings/google-chrome-keyring.gpg \
+# Добавляем актуальный ключ Google Chrome и репозиторий
+RUN wget -q -O - https://dl.google.com/linux/linux_signing_key.pub | gpg --dearmor > /usr/share/keyrings/google-chrome-keyring.gpg \
     && echo "deb [arch=amd64 signed-by=/usr/share/keyrings/google-chrome-keyring.gpg] http://dl.google.com/linux/chrome/deb/ stable main" > /etc/apt/sources.list.d/google-chrome.list
 
 # Обновляем пакеты и устанавливаем Chrome
