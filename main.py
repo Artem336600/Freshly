@@ -5,6 +5,7 @@ import re
 import time
 import os
 import logging
+import random
 from mistralai import Mistral
 from selenium import webdriver
 from selenium.webdriver.common.by import By
@@ -23,6 +24,13 @@ logger = logging.getLogger(__name__)
 api_key = 'smKrnj6cMHni2QSNHZjIBInPlyErMHSu'
 model = "mistral-small-latest"
 client = Mistral(api_key=api_key)
+
+# Список прокси (обновите с рабочими)
+PROXY_LIST = [
+    "http://190.61.88.147:8080",
+    "http://185.199.229.156:7492",
+    # Добавьте свои прокси
+]
 
 app = Flask(__name__)
 CORS(app, resources={r"/*": {"origins": "*"}})
@@ -110,6 +118,10 @@ def get_product():
         chrome_options.add_argument("--disable-blink-features=AutomationControlled")
         chrome_options.add_argument("--start-maximized")
         chrome_options.add_argument("--disable-extensions")
+        if PROXY_LIST:
+            proxy = random.choice(PROXY_LIST)
+            chrome_options.add_argument(f"--proxy-server={proxy}")
+            logger.info(f"Using proxy: {proxy} for '{user_product}'")
 
         driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=chrome_options)
         logger.info(f"Chromedriver initialized for '{user_product}'")
@@ -122,7 +134,7 @@ def get_product():
             WebDriverWait(driver, 40).until(
                 lambda driver: driver.execute_script("return document.readyState") == "complete"
             )
-            time.sleep(3)  # Дополнительная задержка
+            time.sleep(3)
 
             page_source = driver.page_source
             logger.info(f"Page source excerpt for '{user_product}': {page_source[:1000]}")
