@@ -80,26 +80,35 @@ def make_dish():
             logger.error("Invalid AI response format")
             return jsonify({"error": "Ошибка: Некорректный формат ответа от ИИ."}), 500
 
-        # Настройка веб-драйвера
-        chrome_options = Options()
-        chrome_options.add_argument("--headless")
-        chrome_options.add_argument("--no-sandbox")
-        chrome_options.add_argument("--disable-dev-shm-usage")
-        chrome_options.add_argument("--disable-gpu")
-        chrome_options.add_argument("user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36")
-        chrome_options.add_argument("--disable-blink-features=AutomationControlled")
-        chrome_options.add_argument("--start-maximized")
-        chrome_options.add_argument("--disable-extensions")
-        try:
-            driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=chrome_options)
-            logger.info("Chromedriver initialized successfully")
-        except WebDriverException as e:
-            logger.error(f"Failed to initialize chromedriver: {str(e)}")
-            return jsonify({"error": f"Ошибка инициализации chromedriver: {str(e)}"}), 500
+        matched_products = []
+        for product in ai_result["products"]:
+            # Создаём новый экземпляр chromedriver для каждого продукта
+            chrome_options = Options()
+            chrome_options.add_argument("--headless")
+            chrome_options.add_argument("--no-sandbox")
+            chrome_options.add_argument("--disable-dev-shm-usage")
+            chrome_options.add_argument("--disable-gpu")
+            chrome_options.add_argument("user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36")
+            chrome_options.add_argument("--disable-blink-features=AutomationControlled")
+            chrome_options.add_argument("--start-maximized")
+            chrome_options.add_argument("--disable-extensions")
+            try:
+                driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=chrome_options)
+                logger.info("Chromedriver initialized successfully for product: " + product["name"])
+            except WebDriverException as e:
+                logger.error(f"Failed to initialize chromedriver for '{product['name']}': {str(e)}")
+                product_data = {
+                    "name": product["name"],
+                    "category": product["category"],
+                    "price": "Цена не найдена",
+                    "description": "Описание отсутствует",
+                    "image": "https://via.placeholder.com/150"
+                }
+                matched_products.append(product_data)
+                logger.info(f"Product info: {json.dumps(product_data, ensure_ascii=False)}")
+                continue
 
-        try:
-            matched_products = []
-            for product in ai_result["products"]:
+            try:
                 user_product = product["name"]
                 category = product["category"]
                 search_url = f"https://lavka.yandex.ru/search?text={user_product}"
@@ -113,7 +122,6 @@ def make_dish():
                 )
 
                 try:
-                    # Ожидаем видимость результата поиска
                     WebDriverWait(driver, 30).until(
                         EC.visibility_of_element_located((By.CLASS_NAME, "cbuk31w.pyi2ep2.l1ucbhj1.v1y5jj7x"))
                     )
@@ -129,10 +137,11 @@ def make_dish():
                     }
                     matched_products.append(product_data)
                     logger.info(f"Product info: {json.dumps(product_data, ensure_ascii=False)}")
+                    driver.quit()
+                    time.sleep(1)  # Задержка перед следующим продуктом
                     continue
 
                 try:
-                    # Находим первый элемент результата поиска
                     element = driver.find_element(By.CLASS_NAME, "cbuk31w.pyi2ep2.l1ucbhj1.v1y5jj7x")
                     link_element = element.find_element(By.TAG_NAME, "a")
                     link_href = link_element.get_attribute("href")
@@ -203,15 +212,16 @@ def make_dish():
                     matched_products.append(product_data)
                     logger.info(f"Product info: {json.dumps(product_data, ensure_ascii=False)}")
 
-            final_result = {
-                "message": "Подобраны продукты с сайта Яндекс Лавка",
-                "products": matched_products
-            }
-            logger.info(f"Returning: {json.dumps(final_result, ensure_ascii=False)}")
-            return jsonify(final_result)
+                finally:
+                    driver.quit()
+                    time.sleep(1)  # Задержка перед следующим продуктом
 
-        finally:
-            driver.quit()
+        final_result = {
+            "message": "Подобраны продукты с сайта Яндекс Лавка",
+            "products": matched_products
+        }
+        logger.info(f"Returning: {json.dumps(final_result, ensure_ascii=False)}")
+        return jsonify(final_result)
 
     except Exception as e:
         logger.error(f"Error occurred: {str(e)}")
