@@ -25,7 +25,7 @@ model = "mistral-small-latest"
 client = Mistral(api_key=api_key)
 
 app = Flask(__name__)
-CORS(app, resources={r"/make_prod": {"origins": "*"}})
+CORS(app, resources={r"/*": {"origins": "*"}})
 
 DISH_CATEGORIES = ["Закуски", "Супы", "Основные блюда", "Гарниры", "Десерты", "Напитки", "Салаты", "Блюда на гриле"]
 
@@ -88,8 +88,6 @@ def make_dish():
         chrome_options.add_argument("--disable-gpu")
         chrome_options.add_argument("user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36")
         chrome_options.add_argument("--disable-blink-features=AutomationControlled")
-        chrome_options.add_argument("--start-maximized")
-        chrome_options.add_argument("--disable-extensions")
         try:
             driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=chrome_options)
             logger.info("Chromedriver initialized successfully")
@@ -107,13 +105,11 @@ def make_dish():
                 logger.info(f"Searching for: {user_product} at {search_url}")
                 driver.get(search_url)
 
-                # Ожидаем полной загрузки страницы
                 WebDriverWait(driver, 30).until(
                     lambda driver: driver.execute_script("return document.readyState") == "complete"
                 )
 
                 try:
-                    # Ожидаем видимость результата поиска
                     WebDriverWait(driver, 30).until(
                         EC.visibility_of_element_located((By.CLASS_NAME, "cbuk31w.pyi2ep2.l1ucbhj1.v1y5jj7x"))
                     )
@@ -128,11 +124,9 @@ def make_dish():
                         "image": "https://via.placeholder.com/150"
                     }
                     matched_products.append(product_data)
-                    logger.info(f"Product info: {json.dumps(product_data, ensure_ascii=False)}")
                     continue
 
                 try:
-                    # Находим первый элемент результата поиска
                     element = driver.find_element(By.CLASS_NAME, "cbuk31w.pyi2ep2.l1ucbhj1.v1y5jj7x")
                     link_element = element.find_element(By.TAG_NAME, "a")
                     link_href = link_element.get_attribute("href")
@@ -155,8 +149,6 @@ def make_dish():
                         price = price_match.group(1) if price_match else "Цена не найдена"
                     except TimeoutException as e:
                         logger.warning(f"Price not found for '{link_text}', timeout: {str(e)}")
-                    except Exception as e:
-                        logger.warning(f"Price not found for '{link_text}': {str(e)}")
 
                     description = "Описание отсутствует"
                     try:
@@ -167,8 +159,6 @@ def make_dish():
                         description = re.sub(r'В корзину', '', description).strip() or "Описание отсутствует"
                     except TimeoutException as e:
                         logger.warning(f"Description not found for '{link_text}', timeout: {str(e)}")
-                    except Exception as e:
-                        logger.warning(f"Description not found for '{link_text}': {str(e)}")
 
                     img_src = "https://via.placeholder.com/150"
                     try:
@@ -178,8 +168,6 @@ def make_dish():
                         img_src = image_container.find_element(By.TAG_NAME, "img").get_attribute("src")
                     except TimeoutException as e:
                         logger.warning(f"Image not found for '{link_text}', timeout: {str(e)}")
-                    except Exception as e:
-                        logger.error(f"Error finding image for '{link_text}': {str(e)}")
 
                     product_data = {
                         "name": link_text,
@@ -201,7 +189,6 @@ def make_dish():
                         "image": "https://via.placeholder.com/150"
                     }
                     matched_products.append(product_data)
-                    logger.info(f"Product info: {json.dumps(product_data, ensure_ascii=False)}")
 
             final_result = {
                 "message": "Подобраны продукты с сайта Яндекс Лавка",
