@@ -6,3 +6,4 @@ mistralai==1.5.0
 supabase==2.12.0
 selenium==4.27.1
 webdriver_manager==4.0.2
+beautifulsoup4
