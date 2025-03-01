@@ -5,6 +5,7 @@ import re
 import time
 import os
 import logging
+import random
 from mistralai import Mistral
 from selenium import webdriver
 from selenium.webdriver.common.by import By
@@ -23,6 +24,14 @@ logger = logging.getLogger(__name__)
 api_key = 'smKrnj6cMHni2QSNHZjIBInPlyErMHSu'
 model = "mistral-small-latest"
 client = Mistral(api_key=api_key)
+
+# Список прокси (укажите свои или используйте бесплатные тестовые)
+PROXY_LIST = [
+    # Пример: "http://username:password@proxy_ip:port"
+    "http://190.61.88.147:8080",  # Бесплатный прокси (может не работать)
+    "http://185.199.229.156:7492",
+    # Добавьте больше прокси
+]
 
 app = Flask(__name__)
 CORS(app, resources={r"/make_prod": {"origins": "*"}})
@@ -91,8 +100,12 @@ def make_dish():
             chrome_options.add_argument("--disable-blink-features=AutomationControlled")
             chrome_options.add_argument("--start-maximized")
             chrome_options.add_argument("--disable-extensions")
-            # Добавляем прокси (укажите свой прокси, если есть)
-            # chrome_options.add_argument("--proxy-server=http://your_proxy:port")
+            # Выбираем случайный прокси
+            if PROXY_LIST:
+                proxy = random.choice(PROXY_LIST)
+                chrome_options.add_argument(f"--proxy-server={proxy}")
+                logger.info(f"Using proxy: {proxy} for '{product['name']}'")
+            
             try:
                 driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=chrome_options)
                 logger.info("Chromedriver initialized successfully for product: " + product["name"])
