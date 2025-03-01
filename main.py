@@ -86,7 +86,7 @@ def make_dish():
         chrome_options.add_argument("--no-sandbox")
         chrome_options.add_argument("--disable-dev-shm-usage")
         chrome_options.add_argument("--disable-gpu")
-        chrome_options.add_argument("user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36")  # Имитация браузера
+        chrome_options.add_argument("user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36")
         try:
             driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=chrome_options)
             logger.info("Chromedriver initialized successfully")
@@ -103,10 +103,16 @@ def make_dish():
                 
                 logger.info(f"Searching for: {user_product} at {search_url}")
                 driver.get(search_url)
+
+                # Ожидаем полной загрузки страницы через JavaScript
+                WebDriverWait(driver, 30).until(
+                    lambda driver: driver.execute_script("return document.readyState") == "complete"
+                )
+
                 try:
-                    # Увеличиваем тайм-аут до 20 секунд и пробуем более общий селектор
-                    WebDriverWait(driver, 20).until(
-                        EC.presence_of_element_located((By.CSS_SELECTOR, "[class*='search-result']"))
+                    # Пробуем найти результат поиска с универсальным селектором
+                    WebDriverWait(driver, 30).until(
+                        EC.presence_of_element_located((By.XPATH, "//div[contains(@class, 'search')]//div[contains(@class, 'item')]"))
                     )
                 except TimeoutException as e:
                     logger.warning(f"Timeout waiting for search results for '{user_product}': {str(e)}")
@@ -122,22 +128,22 @@ def make_dish():
                     continue
 
                 try:
-                    # Обновляем селекторы на более общие
-                    element = driver.find_element(By.CSS_SELECTOR, "[class*='search-result-item']")
+                    # Находим первый элемент результата поиска
+                    element = driver.find_element(By.XPATH, "//div[contains(@class, 'search')]//div[contains(@class, 'item')]")
                     link_element = element.find_element(By.TAG_NAME, "a")
                     link_href = link_element.get_attribute("href")
                     full_url = link_href if link_href.startswith("https://") else f"https://lavka.yandex.ru{link_href}"
-                    link_text = link_element.find_element(By.CSS_SELECTOR, "[class*='title']").text
+                    link_text = link_element.find_element(By.XPATH, ".//span[contains(@class, 'title')] | .//div[contains(@class, 'title')]").text.strip()
 
                     logger.info(f"Navigating to product page: {full_url}")
                     driver.get(full_url)
-                    WebDriverWait(driver, 20).until(
-                        EC.presence_of_element_located((By.CSS_SELECTOR, "[class*='product-details']"))
+                    WebDriverWait(driver, 30).until(
+                        lambda driver: driver.execute_script("return document.readyState") == "complete"
                     )
 
                     price = "Цена не найдена"
                     try:
-                        price_element = driver.find_element(By.CSS_SELECTOR, "[class*='price']")
+                        price_element = driver.find_element(By.XPATH, "//*[contains(@class, 'price')]")
                         price_text = price_element.text
                         price_match = re.search(r'(\d+\s*₽)', price_text)
                         price = price_match.group(1) if price_match else "Цена не найдена"
@@ -146,15 +152,15 @@ def make_dish():
 
                     description = "Описание отсутствует"
                     try:
-                        desc_element = driver.find_element(By.CSS_SELECTOR, "[class*='description']")
+                        desc_element = driver.find_element(By.XPATH, "//*[contains(@class, 'description')] | //*[contains(@class, 'text')]")
                         description = desc_element.text.strip()
                     except Exception as e:
                         logger.warning(f"Description not found for '{link_text}': {str(e)}")
 
                     img_src = "https://via.placeholder.com/150"
                     try:
-                        image_container = WebDriverWait(driver, 20).until(
-                            EC.presence_of_element_located((By.CSS_SELECTOR, "[class*='image-container'] img"))
+                        image_container = WebDriverWait(driver, 30).until(
+                            EC.presence_of_element_located((By.XPATH, "//img[contains(@class, 'product-image')] | //div[contains(@class, 'image')]//img"))
                         )
                         img_src = image_container.get_attribute("src")
                     except TimeoutException as e:
