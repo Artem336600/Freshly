@@ -5,7 +5,12 @@ import re
 import time
 from bs4 import BeautifulSoup
 import threading
-import webbrowser  # Добавлен импорт webbrowser
+import webbrowser
+import logging
+
+# Настройка логирования
+logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
+logger = logging.getLogger(__name__)
 
 app = Flask(__name__, static_folder='.')
 SERVER_URL = "https://freshly-production.up.railway.app/make_prod"
@@ -26,6 +31,7 @@ def fetch_product_info(product_name, category):
                 break
 
         if not link:
+            logger.warning(f"Не найдена ссылка на Яндекс Лавку для '{product_name}'")
             return {
                 "name": product_name,
                 "category": category,
@@ -64,7 +70,7 @@ def fetch_product_info(product_name, category):
             "image": img_src
         }
     except Exception as e:
-        print(f"Ошибка при получении данных для '{product_name}': {e}")
+        logger.error(f"Ошибка при получении данных для '{product_name}': {e}")
         return {
             "name": product_name,
             "category": category,
@@ -75,20 +81,24 @@ def fetch_product_info(product_name, category):
 
 @app.route('/')
 def serve_index():
+    logger.debug("Запрос к /")
     return send_from_directory('.', 'index.html')
 
 @app.route('/make_prod', methods=['POST'])
 def make_prod():
+    logger.debug("Запрос к /make_prod")
     data = request.get_json()
     message = data.get('message')
     headers = {"Content-Type": "application/json"}
     response = requests.post(SERVER_URL, headers=headers, json={"message": message})
     if response.status_code == 200:
         return jsonify(response.json())
+    logger.error(f"Ошибка сервера: {response.status_code}")
     return jsonify({"error": "Ошибка сервера"}), 500
 
 @app.route('/get_product', methods=['POST'])
 def get_product():
+    logger.debug("Запрос к /get_product")
     data = request.get_json()
     product_name = data.get('name')
     category = data.get('category')
@@ -96,10 +106,10 @@ def get_product():
     return jsonify(product_info)
 
 def run_server():
-    app.run(host='0.0.0.0', port=5000)
+    app.run(host='0.0.0.0', port=5000, debug=True)
 
 if __name__ == "__main__":
     threading.Thread(target=run_server, daemon=True).start()
-    print("Локальный сервер запущен на http://localhost:5000")
-    time.sleep(1)  # Даём серверу время запуститься
+    logger.info("Локальный сервер запущен на http://localhost:5000")
+    time.sleep(3)  # Увеличили задержку до 3 секунд
     webbrowser.open("http://localhost:5000")
