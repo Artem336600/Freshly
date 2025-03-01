@@ -5,7 +5,6 @@ import re
 import time
 import os
 import logging
-import random
 from mistralai import Mistral
 from selenium import webdriver
 from selenium.webdriver.common.by import By
@@ -25,15 +24,8 @@ api_key = 'smKrnj6cMHni2QSNHZjIBInPlyErMHSu'
 model = "mistral-small-latest"
 client = Mistral(api_key=api_key)
 
-# Список прокси (обновите с рабочими прокси)
-PROXY_LIST = [
-    "http://190.61.88.147:8080",
-    "http://185.199.229.156:7492",
-    # Добавьте рабочие прокси здесь
-]
-
 app = Flask(__name__)
-CORS(app, resources={r"/make_prod": {"origins": "*"}})
+CORS(app, resources={r"/*": {"origins": "*"}})
 
 DISH_CATEGORIES = ["Закуски", "Супы", "Основные блюда", "Гарниры", "Десерты", "Напитки", "Салаты", "Блюда на гриле"]
 
@@ -45,7 +37,7 @@ def add_cors_headers(response):
     return response
 
 @app.route('/make_prod', methods=['POST', 'OPTIONS'])
-def make_dish():
+def make_prod():
     if request.method == 'OPTIONS':
         return make_response('', 200)
 
@@ -88,189 +80,134 @@ def make_dish():
             logger.error("Invalid AI response format")
             return jsonify({"error": "Ошибка: Некорректный формат ответа от ИИ."}), 500
 
-        matched_products = []
-        for product in ai_result["products"]:
-            chrome_options = Options()
-            chrome_options.add_argument("--headless")
-            chrome_options.add_argument("--no-sandbox")
-            chrome_options.add_argument("--disable-dev-shm-usage")
-            chrome_options.add_argument("--disable-gpu")
-            chrome_options.add_argument("user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36")
-            chrome_options.add_argument("--disable-blink-features=AutomationControlled")
-            chrome_options.add_argument("--start-maximized")
-            chrome_options.add_argument("--disable-extensions")
-            if PROXY_LIST:
-                proxy = random.choice(PROXY_LIST)
-                chrome_options.add_argument(f"--proxy-server={proxy}")
-                logger.info(f"Using proxy: {proxy} for '{product['name']}'")
-            
-            try:
-                driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=chrome_options)
-                logger.info("Chromedriver initialized successfully for product: " + product["name"])
-            except WebDriverException as e:
-                logger.error(f"Failed to initialize chromedriver for '{product['name']}': {str(e)}")
-                product_data = {
-                    "name": product["name"],
-                    "category": product["category"],
-                    "price": "Цена не найдена",
-                    "description": "Описание отсутствует",
-                    "image": "https://via.placeholder.com/150"
-                }
-                matched_products.append(product_data)
-                logger.info(f"Product info: {json.dumps(product_data, ensure_ascii=False)}")
-                continue
-
-            try:
-                user_product = product["name"]
-                category = product["category"]
-                search_url = f"https://lavka.yandex.ru/search?text={user_product}"
-                
-                logger.info(f"Searching for: {user_product} at {search_url}")
-                driver.get(search_url)
-
-                # Ожидаем полной загрузки страницы
-                WebDriverWait(driver, 40).until(
-                    lambda driver: driver.execute_script("return document.readyState") == "complete"
-                )
-                time.sleep(3)  # Дополнительная задержка для динамической загрузки
-
-                # Логируем HTML для отладки
-                page_source = driver.page_source
-                logger.info(f"Page source excerpt for '{user_product}': {page_source[:1000]}")
-
-                # Проверяем наличие капчи
-                if "Are you not a robot?" in page_source:
-                    logger.warning(f"Captcha detected for '{user_product}'")
-                    product_data = {
-                        "name": user_product,
-                        "category": category,
-                        "price": "Цена не найдена (капча)",
-                        "description": "Описание отсутствует (капча)",
-                        "image": "https://via.placeholder.com/150"
-                    }
-                    matched_products.append(product_data)
-                    logger.info(f"Product info: {json.dumps(product_data, ensure_ascii=False)}")
-                    driver.quit()
-                    time.sleep(1)
-                    continue
-
-                # Проверяем редирект
-                current_url = driver.current_url
-                if current_url != search_url:
-                    logger.info(f"Redirect detected: {current_url}")
-                    driver.get(search_url)  # Повторяем запрос
-
-                try:
-                    for _ in range(2):
-                        try:
-                            WebDriverWait(driver, 40).until(
-                                EC.visibility_of_element_located((By.CLASS_NAME, "cbuk31w.pyi2ep2.l1ucbhj1.v1y5jj7x"))
-                            )
-                            logger.info("Search results found")
-                            break
-                        except TimeoutException:
-                            logger.info(f"Retrying search results for '{user_product}'...")
-                            time.sleep(2)
-                    else:
-                        raise TimeoutException("Search results not found after retries")
-
-                    element = driver.find_element(By.CLASS_NAME, "cbuk31w.pyi2ep2.l1ucbhj1.v1y5jj7x")
-                    link_element = element.find_element(By.TAG_NAME, "a")
-                    link_href = link_element.get_attribute("href")
-                    full_url = link_href if link_href.startswith("https://") else f"https://lavka.yandex.ru{link_href}"
-                    link_text = link_element.find_element(By.CLASS_NAME, "l4t8cc8.a1dq5c6d").text.strip()
-
-                    logger.info(f"Navigating to product page: {full_url}")
-                    driver.get(full_url)
-                    WebDriverWait(driver, 40).until(
-                        lambda driver: driver.execute_script("return document.readyState") == "complete"
-                    )
-
-                    price = "Цена не найдена"
-                    try:
-                        price_element = WebDriverWait(driver, 40).until(
-                            EC.visibility_of_element_located((By.CLASS_NAME, "c17r1xrr"))
-                        )
-                        price_text = price_element.text
-                        price_match = re.search(r'(\d+\s*₽)', price_text)
-                        price = price_match.group(1) if price_match else "Цена не найдена"
-                    except TimeoutException as e:
-                        logger.warning(f"Price not found for '{link_text}', timeout: {str(e)}")
-                    except Exception as e:
-                        logger.warning(f"Price not found for '{link_text}': {str(e)}")
-
-                    description = "Описание отсутствует"
-                    try:
-                        desc_element = WebDriverWait(driver, 40).until(
-                            EC.visibility_of_element_located((By.CLASS_NAME, "c17r1xrr"))
-                        )
-                        description = re.sub(r'.*₽.*$', '', desc_element.text, flags=re.MULTILINE).strip()
-                        description = re.sub(r'В корзину', '', description).strip() or "Описание отсутствует"
-                    except TimeoutException as e:
-                        logger.warning(f"Description not found for '{link_text}', timeout: {str(e)}")
-                    except Exception as e:
-                        logger.warning(f"Description not found for '{link_text}': {str(e)}")
-
-                    img_src = "https://via.placeholder.com/150"
-                    try:
-                        image_container = WebDriverWait(driver, 40).until(
-                            EC.visibility_of_element_located((By.CLASS_NAME, "ibhxbmx.p1wkliaw"))
-                        )
-                        img_src = image_container.find_element(By.TAG_NAME, "img").get_attribute("src")
-                    except TimeoutException as e:
-                        logger.warning(f"Image not found for '{link_text}', timeout: {str(e)}")
-                    except Exception as e:
-                        logger.error(f"Error finding image for '{link_text}': {str(e)}")
-
-                    product_data = {
-                        "name": link_text,
-                        "category": category,
-                        "price": price,
-                        "description": description,
-                        "image": img_src
-                    }
-                    matched_products.append(product_data)
-                    logger.info(f"Product info: {json.dumps(product_data, ensure_ascii=False)}")
-
-                except Exception as e:
-                    logger.error(f"Ошибка при поиске '{user_product}': {str(e)}")
-                    product_data = {
-                        "name": user_product,
-                        "category": category,
-                        "price": "Цена не найдена",
-                        "description": "Описание отсутствует",
-                        "image": "https://via.placeholder.com/150"
-                    }
-                    matched_products.append(product_data)
-                    logger.info(f"Product info: {json.dumps(product_data, ensure_ascii=False)}")
-
-                driver.quit()
-                time.sleep(1)
-
-            except Exception as e:
-                logger.error(f"Ошибка при поиске '{user_product}': {str(e)}")
-                product_data = {
-                    "name": user_product,
-                    "category": category,
-                    "price": "Цена не найдена",
-                    "description": "Описание отсутствует",
-                    "image": "https://via.placeholder.com/150"
-                }
-                matched_products.append(product_data)
-                logger.info(f"Product info: {json.dumps(product_data, ensure_ascii=False)}")
-                driver.quit()
-                time.sleep(1)
-
-        final_result = {
-            "message": "Подобраны продукты с сайта Яндекс Лавка",
-            "products": matched_products
-        }
-        logger.info(f"Returning: {json.dumps(final_result, ensure_ascii=False)}")
-        return jsonify(final_result)
+        return jsonify(ai_result)
 
     except Exception as e:
         logger.error(f"Error occurred: {str(e)}")
         return jsonify({"error": f"Произошла ошибка: {str(e)}"}), 500
+
+@app.route('/get_product', methods=['POST', 'OPTIONS'])
+def get_product():
+    if request.method == 'OPTIONS':
+        return make_response('', 200)
+
+    try:
+        data = request.get_json()
+        user_product = data.get('name')
+        category = data.get('category')
+        logger.info(f"Fetching product: {user_product} in category: {category}")
+
+        if not user_product or not category:
+            logger.warning("Name or category missing")
+            return jsonify({"error": "Ошибка: Укажите название продукта и категорию."}), 400
+
+        chrome_options = Options()
+        chrome_options.add_argument("--headless")
+        chrome_options.add_argument("--no-sandbox")
+        chrome_options.add_argument("--disable-dev-shm-usage")
+        chrome_options.add_argument("--disable-gpu")
+        chrome_options.add_argument("user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36")
+        chrome_options.add_argument("--disable-blink-features=AutomationControlled")
+        chrome_options.add_argument("--start-maximized")
+        chrome_options.add_argument("--disable-extensions")
+
+        driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=chrome_options)
+        logger.info(f"Chromedriver initialized for '{user_product}'")
+
+        try:
+            search_url = f"https://lavka.yandex.ru/search?text={user_product}"
+            logger.info(f"Searching for: {user_product} at {search_url}")
+            driver.get(search_url)
+
+            WebDriverWait(driver, 40).until(
+                lambda driver: driver.execute_script("return document.readyState") == "complete"
+            )
+            time.sleep(3)  # Дополнительная задержка
+
+            page_source = driver.page_source
+            logger.info(f"Page source excerpt for '{user_product}': {page_source[:1000]}")
+
+            if "Are you not a robot?" in page_source:
+                logger.warning(f"Captcha detected for '{user_product}'")
+                product_data = {
+                    "name": user_product,
+                    "category": category,
+                    "price": "Цена не найдена (капча)",
+                    "description": "Описание отсутствует (капча)",
+                    "image": "https://via.placeholder.com/150"
+                }
+                return jsonify(product_data)
+
+            WebDriverWait(driver, 40).until(
+                EC.visibility_of_element_located((By.CLASS_NAME, "cbuk31w.pyi2ep2.l1ucbhj1.v1y5jj7x"))
+            )
+            logger.info("Search results found")
+
+            element = driver.find_element(By.CLASS_NAME, "cbuk31w.pyi2ep2.l1ucbhj1.v1y5jj7x")
+            link_element = element.find_element(By.TAG_NAME, "a")
+            link_href = link_element.get_attribute("href")
+            full_url = link_href if link_href.startswith("https://") else f"https://lavka.yandex.ru{link_href}"
+            link_text = link_element.find_element(By.CLASS_NAME, "l4t8cc8.a1dq5c6d").text.strip()
+
+            logger.info(f"Navigating to product page: {full_url}")
+            driver.get(full_url)
+            WebDriverWait(driver, 40).until(
+                lambda driver: driver.execute_script("return document.readyState") == "complete"
+            )
+
+            price = "Цена не найдена"
+            try:
+                price_element = WebDriverWait(driver, 40).until(
+                    EC.visibility_of_element_located((By.CLASS_NAME, "c17r1xrr"))
+                )
+                price_text = price_element.text
+                price_match = re.search(r'(\d+\s*₽)', price_text)
+                price = price_match.group(1) if price_match else "Цена не найдена"
+            except TimeoutException as e:
+                logger.warning(f"Price not found for '{link_text}', timeout: {str(e)}")
+
+            description = "Описание отсутствует"
+            try:
+                desc_element = WebDriverWait(driver, 40).until(
+                    EC.visibility_of_element_located((By.CLASS_NAME, "c17r1xrr"))
+                )
+                description = re.sub(r'.*₽.*$', '', desc_element.text, flags=re.MULTILINE).strip()
+                description = re.sub(r'В корзину', '', description).strip() or "Описание отсутствует"
+            except TimeoutException as e:
+                logger.warning(f"Description not found for '{link_text}', timeout: {str(e)}")
+
+            img_src = "https://via.placeholder.com/150"
+            try:
+                image_container = WebDriverWait(driver, 40).until(
+                    EC.visibility_of_element_located((By.CLASS_NAME, "ibhxbmx.p1wkliaw"))
+                )
+                img_src = image_container.find_element(By.TAG_NAME, "img").get_attribute("src")
+            except TimeoutException as e:
+                logger.warning(f"Image not found for '{link_text}', timeout: {str(e)}")
+
+            product_data = {
+                "name": link_text,
+                "category": category,
+                "price": price,
+                "description": description,
+                "image": img_src
+            }
+            logger.info(f"Product info: {json.dumps(product_data, ensure_ascii=False)}")
+            return jsonify(product_data)
+
+        finally:
+            driver.quit()
+
+    except Exception as e:
+        logger.error(f"Error fetching '{user_product}': {str(e)}")
+        product_data = {
+            "name": user_product,
+            "category": category,
+            "price": "Цена не найдена",
+            "description": "Описание отсутствует",
+            "image": "https://via.placeholder.com/150"
+        }
+        return jsonify(product_data)
 
 if __name__ == '__main__':
     app.run(debug=True, host="0.0.0.0", port=int(os.getenv("PORT", 5000)))
