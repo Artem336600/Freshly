@@ -25,12 +25,11 @@ api_key = 'smKrnj6cMHni2QSNHZjIBInPlyErMHSu'
 model = "mistral-small-latest"
 client = Mistral(api_key=api_key)
 
-# Список прокси (укажите свои или используйте бесплатные тестовые)
+# Список прокси (обновите с рабочими прокси)
 PROXY_LIST = [
-    # Пример: "http://username:password@proxy_ip:port"
-    "http://190.61.88.147:8080",  # Бесплатный прокси (может не работать)
+    "http://190.61.88.147:8080",
     "http://185.199.229.156:7492",
-    # Добавьте больше прокси
+    # Добавьте рабочие прокси здесь
 ]
 
 app = Flask(__name__)
@@ -100,7 +99,6 @@ def make_dish():
             chrome_options.add_argument("--disable-blink-features=AutomationControlled")
             chrome_options.add_argument("--start-maximized")
             chrome_options.add_argument("--disable-extensions")
-            # Выбираем случайный прокси
             if PROXY_LIST:
                 proxy = random.choice(PROXY_LIST)
                 chrome_options.add_argument(f"--proxy-server={proxy}")
@@ -134,6 +132,7 @@ def make_dish():
                 WebDriverWait(driver, 40).until(
                     lambda driver: driver.execute_script("return document.readyState") == "complete"
                 )
+                time.sleep(3)  # Дополнительная задержка для динамической загрузки
 
                 # Логируем HTML для отладки
                 page_source = driver.page_source
@@ -155,6 +154,12 @@ def make_dish():
                     time.sleep(1)
                     continue
 
+                # Проверяем редирект
+                current_url = driver.current_url
+                if current_url != search_url:
+                    logger.info(f"Redirect detected: {current_url}")
+                    driver.get(search_url)  # Повторяем запрос
+
                 try:
                     for _ in range(2):
                         try:
@@ -169,8 +174,66 @@ def make_dish():
                     else:
                         raise TimeoutException("Search results not found after retries")
 
-                except TimeoutException as e:
-                    logger.warning(f"Timeout waiting for search results for '{user_product}': {str(e)}")
+                    element = driver.find_element(By.CLASS_NAME, "cbuk31w.pyi2ep2.l1ucbhj1.v1y5jj7x")
+                    link_element = element.find_element(By.TAG_NAME, "a")
+                    link_href = link_element.get_attribute("href")
+                    full_url = link_href if link_href.startswith("https://") else f"https://lavka.yandex.ru{link_href}"
+                    link_text = link_element.find_element(By.CLASS_NAME, "l4t8cc8.a1dq5c6d").text.strip()
+
+                    logger.info(f"Navigating to product page: {full_url}")
+                    driver.get(full_url)
+                    WebDriverWait(driver, 40).until(
+                        lambda driver: driver.execute_script("return document.readyState") == "complete"
+                    )
+
+                    price = "Цена не найдена"
+                    try:
+                        price_element = WebDriverWait(driver, 40).until(
+                            EC.visibility_of_element_located((By.CLASS_NAME, "c17r1xrr"))
+                        )
+                        price_text = price_element.text
+                        price_match = re.search(r'(\d+\s*₽)', price_text)
+                        price = price_match.group(1) if price_match else "Цена не найдена"
+                    except TimeoutException as e:
+                        logger.warning(f"Price not found for '{link_text}', timeout: {str(e)}")
+                    except Exception as e:
+                        logger.warning(f"Price not found for '{link_text}': {str(e)}")
+
+                    description = "Описание отсутствует"
+                    try:
+                        desc_element = WebDriverWait(driver, 40).until(
+                            EC.visibility_of_element_located((By.CLASS_NAME, "c17r1xrr"))
+                        )
+                        description = re.sub(r'.*₽.*$', '', desc_element.text, flags=re.MULTILINE).strip()
+                        description = re.sub(r'В корзину', '', description).strip() or "Описание отсутствует"
+                    except TimeoutException as e:
+                        logger.warning(f"Description not found for '{link_text}', timeout: {str(e)}")
+                    except Exception as e:
+                        logger.warning(f"Description not found for '{link_text}': {str(e)}")
+
+                    img_src = "https://via.placeholder.com/150"
+                    try:
+                        image_container = WebDriverWait(driver, 40).until(
+                            EC.visibility_of_element_located((By.CLASS_NAME, "ibhxbmx.p1wkliaw"))
+                        )
+                        img_src = image_container.find_element(By.TAG_NAME, "img").get_attribute("src")
+                    except TimeoutException as e:
+                        logger.warning(f"Image not found for '{link_text}', timeout: {str(e)}")
+                    except Exception as e:
+                        logger.error(f"Error finding image for '{link_text}': {str(e)}")
+
+                    product_data = {
+                        "name": link_text,
+                        "category": category,
+                        "price": price,
+                        "description": description,
+                        "image": img_src
+                    }
+                    matched_products.append(product_data)
+                    logger.info(f"Product info: {json.dumps(product_data, ensure_ascii=False)}")
+
+                except Exception as e:
+                    logger.error(f"Ошибка при поиске '{user_product}': {str(e)}")
                     product_data = {
                         "name": user_product,
                         "category": category,
@@ -180,67 +243,6 @@ def make_dish():
                     }
                     matched_products.append(product_data)
                     logger.info(f"Product info: {json.dumps(product_data, ensure_ascii=False)}")
-                    driver.quit()
-                    time.sleep(1)
-                    continue
-
-                element = driver.find_element(By.CLASS_NAME, "cbuk31w.pyi2ep2.l1ucbhj1.v1y5jj7x")
-                link_element = element.find_element(By.TAG_NAME, "a")
-                link_href = link_element.get_attribute("href")
-                full_url = link_href if link_href.startswith("https://") else f"https://lavka.yandex.ru{link_href}"
-                link_text = link_element.find_element(By.CLASS_NAME, "l4t8cc8.a1dq5c6d").text.strip()
-
-                logger.info(f"Navigating to product page: {full_url}")
-                driver.get(full_url)
-                WebDriverWait(driver, 40).until(
-                    lambda driver: driver.execute_script("return document.readyState") == "complete"
-                )
-
-                price = "Цена не найдена"
-                try:
-                    price_element = WebDriverWait(driver, 40).until(
-                        EC.visibility_of_element_located((By.CLASS_NAME, "c17r1xrr"))
-                    )
-                    price_text = price_element.text
-                    price_match = re.search(r'(\d+\s*₽)', price_text)
-                    price = price_match.group(1) if price_match else "Цена не найдена"
-                except TimeoutException as e:
-                    logger.warning(f"Price not found for '{link_text}', timeout: {str(e)}")
-                except Exception as e:
-                    logger.warning(f"Price not found for '{link_text}': {str(e)}")
-
-                description = "Описание отсутствует"
-                try:
-                    desc_element = WebDriverWait(driver, 40).until(
-                        EC.visibility_of_element_located((By.CLASS_NAME, "c17r1xrr"))
-                    )
-                    description = re.sub(r'.*₽.*$', '', desc_element.text, flags=re.MULTILINE).strip()
-                    description = re.sub(r'В корзину', '', description).strip() or "Описание отсутствует"
-                except TimeoutException as e:
-                    logger.warning(f"Description not found for '{link_text}', timeout: {str(e)}")
-                except Exception as e:
-                    logger.warning(f"Description not found for '{link_text}': {str(e)}")
-
-                img_src = "https://via.placeholder.com/150"
-                try:
-                    image_container = WebDriverWait(driver, 40).until(
-                        EC.visibility_of_element_located((By.CLASS_NAME, "ibhxbmx.p1wkliaw"))
-                    )
-                    img_src = image_container.find_element(By.TAG_NAME, "img").get_attribute("src")
-                except TimeoutException as e:
-                    logger.warning(f"Image not found for '{link_text}', timeout: {str(e)}")
-                except Exception as e:
-                    logger.error(f"Error finding image for '{link_text}': {str(e)}")
-
-                product_data = {
-                    "name": link_text,
-                    "category": category,
-                    "price": price,
-                    "description": description,
-                    "image": img_src
-                }
-                matched_products.append(product_data)
-                logger.info(f"Product info: {json.dumps(product_data, ensure_ascii=False)}")
 
                 driver.quit()
                 time.sleep(1)
