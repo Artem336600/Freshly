@@ -1,220 +1,40 @@
-from flask import Flask, request, jsonify, make_response
-from flask_cors import CORS
+from flask import Flask, request, jsonify, send_from_directory
+import requests
 import json
 import re
 import time
-import os
-import logging
-import random
-import requests
-from requests_html import HTMLSession
-from mistralai import Mistral
-import pickle
+from bs4 import BeautifulSoup
+import threading
 
-# Настройка логирования
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
-logger = logging.getLogger(__name__)
+app = Flask(__name__, static_folder='.')
+SERVER_URL = "https://freshly-production.up.railway.app/make_prod"
 
-# Данные для подключения к Mistral
-api_key = 'smKrnj6cMHni2QSNHZjIBInPlyErMHSu'
-model = "mistral-small-latest"
-client = Mistral(api_key=api_key)
-
-# 2Captcha API ключ (замените на свой)
-TWOCAPTCHA_API_KEY = "YOUR_2CAPTCHA_API_KEY"
-
-# Путь для кэширования
-CACHE_FILE = "product_cache.pkl"
-
-app = Flask(__name__)
-CORS(app, resources={r"/*": {"origins": "*"}})
-
-DISH_CATEGORIES = ["Закуски", "Супы", "Основные блюда", "Гарниры", "Десерты", "Напитки", "Салаты", "Блюда на гриле"]
-
-def load_cache():
-    if os.path.exists(CACHE_FILE):
-        with open(CACHE_FILE, 'rb') as f:
-            return pickle.load(f)
-    return {}
-
-def save_cache(cache):
-    with open(CACHE_FILE, 'wb') as f:
-        pickle.dump(cache, f)
-
-def solve_captcha(page_html, url):
-    """Решает капчу через 2Captcha (упрощённая версия для requests-html)"""
+def fetch_product_info(product_name, category):
+    search_url = f"https://www.google.com/search?q={product_name}+Яндекс+Лавка"
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
+    }
     try:
-        sitekey_match = re.search(r'data-sitekey="([^"]+)"', page_html)
-        if not sitekey_match:
-            raise Exception("Sitekey не найден")
-        sitekey = sitekey_match.group(1)
+        response = requests.get(search_url, headers=headers, timeout=10)
+        soup = BeautifulSoup(response.text, 'html.parser')
 
-        captcha_request = requests.post(
-            "http://2captcha.com/in.php",
-            data={
-                "key": TWOCAPTCHA_API_KEY,
-                "method": "userrecaptcha",
-                "googlekey": sitekey,
-                "pageurl": url,
-                "json": 1
-            }
-        )
-        captcha_id = captcha_request.json().get("request")
+        link = None
+        for a in soup.find_all("a", href=True):
+            if "lavka.yandex.ru" in a["href"]:
+                link = re.sub(r'^/url\?q=([^&]+).*', r'\1', a["href"])
+                break
 
-        for _ in range(20):
-            result = requests.get(
-                f"http://2captcha.com/res.php?key={TWOCAPTCHA_API_KEY}&action=get&id={captcha_id}&json=1"
-            ).json()
-            if result.get("status") == 1:
-                return result.get("request")
-            time.sleep(5)
-        raise Exception("Не удалось решить капчу за отведённое время")
-    except Exception as e:
-        logger.error(f"Ошибка при решении капчи: {str(e)}")
-        return None
-
-@app.after_request
-def add_cors_headers(response):
-    response.headers['Access-Control-Allow-Origin'] = '*'
-    response.headers['Access-Control-Allow-Methods'] = 'POST, OPTIONS'
-    response.headers['Access-Control-Allow-Headers'] = 'Content-Type'
-    return response
-
-@app.route('/make_prod', methods=['POST', 'OPTIONS'])
-def make_prod():
-    if request.method == 'OPTIONS':
-        return make_response('', 200)
-
-    try:
-        data = request.get_json()
-        user_message = data.get('message')
-        logger.info(f"Received message: {user_message}")
-        
-        if not user_message:
-            logger.warning("No message provided")
-            return jsonify({"error": "Ошибка: Введите вопрос."}), 400
-
-        system_message = (
-            f"Ты помощник по подбору еды для Smart Food Ecosystem. "
-            f"На основе запроса пользователя сформируй продуктовый набор, придумывая названия продуктов. "
-            f"Учитывай категории, теги и пожелания из запроса. "
-            f"Ответ должен быть в формате JSON: "
-            f"\"message\": \"Подобраны продукты\", \"products\": [{{\"name\": \"название продукта\", \"category\": \"категория\"}}, ...]}}. "
-            f"Если в запросе указаны категории с количеством, возвращай точное число продуктов для каждой категории. "
-            f"Если категорий нет, возвращай минимум 3 продукта."
-        )
-        user_prompt = f"Запрос пользователя: {user_message}"
-        logger.info(f"Prompt length: {len(user_prompt)}")
-
-        chat_response = client.chat.complete(
-            model=model,
-            messages=[
-                {"role": "system", "content": system_message},
-                {"role": "user", "content": user_prompt}
-            ]
-        )
-        response_text = chat_response.choices[0].message.content.strip()
-        logger.info(f"Raw AI response: {response_text}")
-
-        cleaned_response = re.sub(r'```json\s*|\s*```', '', response_text).strip()
-        ai_result = json.loads(cleaned_response)
-        logger.info(f"Parsed AI response: {json.dumps(ai_result, ensure_ascii=False)}")
-
-        if not isinstance(ai_result, dict) or "message" not in ai_result or "products" not in ai_result:
-            logger.error("Invalid AI response format")
-            return jsonify({"error": "Ошибка: Некорректный формат ответа от ИИ."}), 500
-
-        return jsonify(ai_result)
-
-    except Exception as e:
-        logger.error(f"Error occurred: {str(e)}")
-        return jsonify({"error": f"Произошла ошибка: {str(e)}"}), 500
-
-@app.route('/get_product', methods=['POST', 'OPTIONS'])
-def get_product():
-    if request.method == 'OPTIONS':
-        return make_response('', 200)
-
-    try:
-        data = request.get_json()
-        user_product = data.get('name')
-        category = data.get('category')
-        logger.info(f"Fetching product: {user_product} in category: {category}")
-
-        if not user_product or not category:
-            logger.warning("Name or category missing")
-            return jsonify({"error": "Ошибка: Укажите название продукта и категорию."}), 400
-
-        # Проверяем кэш
-        cache = load_cache()
-        cache_key = f"{user_product}_{category}"
-        if cache_key in cache:
-            logger.info(f"Loaded from cache for '{user_product}'")
-            return jsonify(cache[cache_key])
-
-        session = HTMLSession()
-        headers = {
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
-        }
-        search_url = f"https://lavka.yandex.ru/search?text={user_product}"
-
-        response = session.get(search_url, headers=headers, timeout=10)
-        response.html.render(timeout=20, sleep=2)
-        logger.info(f"Response status for '{user_product}': {response.status_code}")
-
-        if response.status_code != 200:
-            logger.warning(f"Failed to fetch page for '{user_product}': Status {response.status_code}")
-            product_data = {
-                "name": user_product,
+        if not link:
+            return {
+                "name": product_name,
                 "category": category,
                 "price": "Цена не найдена",
                 "description": "Описание отсутствует",
                 "image": "https://via.placeholder.com/150"
             }
-            return jsonify(product_data)
 
-        soup = response.html
-        logger.info(f"Page excerpt for '{user_product}': {soup.text[:1000]}")
-
-        if "Are you not a robot?" in soup.text:
-            logger.warning(f"Captcha detected for '{user_product}'")
-            captcha_solution = solve_captcha(response.text, search_url)
-            if not captcha_solution:
-                product_data = {
-                    "name": user_product,
-                    "category": category,
-                    "price": "Цена не найдена (капча)",
-                    "description": "Описание отсутствует (капча)",
-                    "image": "https://via.placeholder.com/150"
-                }
-                return jsonify(product_data)
-
-            # Повторный запрос после решения капчи
-            response = session.get(search_url, headers=headers, timeout=10)
-            response.html.render(timeout=20, sleep=2)
-            soup = response.html
-
-        product_div = soup.find("div", class_="cbuk31w pyi2ep2 l1ucbhj1 v1y5jj7x")
-        if not product_div:
-            logger.warning(f"No product found for '{user_product}'")
-            product_data = {
-                "name": user_product,
-                "category": category,
-                "price": "Цена не найдена",
-                "description": "Описание отсутствует",
-                "image": "https://via.placeholder.com/150"
-            }
-            cache[cache_key] = product_data
-            save_cache(cache)
-            return jsonify(product_data)
-
-        name = product_div.find("span", class_="l4t8cc8 a1dq5c6d").text.strip()
-        link = product_div.find("a")["href"]
-        full_url = link if link.startswith("https://") else f"https://lavka.yandex.ru{link}"
-
-        product_response = session.get(full_url, headers=headers, timeout=10)
-        product_response.html.render(timeout=20, sleep=2)
-        product_soup = product_response.html
+        product_response = requests.get(link, headers=headers, timeout=10)
+        product_soup = BeautifulSoup(product_response.text, 'html.parser')
 
         price = "Цена не найдена"
         price_elem = product_soup.find("div", class_="c17r1xrr")
@@ -235,30 +55,50 @@ def get_product():
             if img and "src" in img.attrs:
                 img_src = img["src"]
 
-        product_data = {
-            "name": name,
+        return {
+            "name": product_name,
             "category": category,
             "price": price,
             "description": description,
             "image": img_src
         }
-        logger.info(f"Product info: {json.dumps(product_data, ensure_ascii=False)}")
-        
-        # Сохраняем в кэш
-        cache[cache_key] = product_data
-        save_cache(cache)
-        return jsonify(product_data)
-
     except Exception as e:
-        logger.error(f"Error fetching '{user_product}': {str(e)}")
-        product_data = {
-            "name": user_product,
+        print(f"Ошибка при получении данных для '{product_name}': {e}")
+        return {
+            "name": product_name,
             "category": category,
             "price": "Цена не найдена",
             "description": "Описание отсутствует",
             "image": "https://via.placeholder.com/150"
         }
-        return jsonify(product_data)
 
-if __name__ == '__main__':
-    app.run(debug=True, host="0.0.0.0", port=int(os.getenv("PORT", 5000)))
+@app.route('/')
+def serve_index():
+    return send_from_directory('.', 'index.html')
+
+@app.route('/make_prod', methods=['POST'])
+def make_prod():
+    data = request.get_json()
+    message = data.get('message')
+    headers = {"Content-Type": "application/json"}
+    response = requests.post(SERVER_URL, headers=headers, json={"message": message})
+    if response.status_code == 200:
+        return jsonify(response.json())
+    return jsonify({"error": "Ошибка сервера"}), 500
+
+@app.route('/get_product', methods=['POST'])
+def get_product():
+    data = request.get_json()
+    product_name = data.get('name')
+    category = data.get('category')
+    product_info = fetch_product_info(product_name, category)
+    return jsonify(product_info)
+
+def run_server():
+    app.run(host='0.0.0.0', port=5000)
+
+if __name__ == "__main__":
+    threading.Thread(target=run_server, daemon=True).start()
+    print("Локальный сервер запущен на http://localhost:5000")
+    time.sleep(1)  # Даём серверу время запуститься
+    webbrowser.open("http://localhost:5000")
