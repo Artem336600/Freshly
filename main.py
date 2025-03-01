@@ -87,6 +87,7 @@ def make_dish():
         chrome_options.add_argument("--disable-dev-shm-usage")
         chrome_options.add_argument("--disable-gpu")
         chrome_options.add_argument("user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36")
+        chrome_options.add_argument("--disable-blink-features=AutomationControlled")  # Скрытие автоматизации
         try:
             driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=chrome_options)
             logger.info("Chromedriver initialized successfully")
@@ -104,15 +105,15 @@ def make_dish():
                 logger.info(f"Searching for: {user_product} at {search_url}")
                 driver.get(search_url)
 
-                # Ожидаем полной загрузки страницы через JavaScript
+                # Ожидаем полной загрузки страницы
                 WebDriverWait(driver, 30).until(
                     lambda driver: driver.execute_script("return document.readyState") == "complete"
                 )
 
                 try:
-                    # Пробуем найти результат поиска с универсальным селектором
+                    # Пробуем найти результат поиска
                     WebDriverWait(driver, 30).until(
-                        EC.presence_of_element_located((By.XPATH, "//div[contains(@class, 'search')]//div[contains(@class, 'item')]"))
+                        EC.presence_of_element_located((By.XPATH, "//div[contains(@class, 'ProductCard')]"))
                     )
                 except TimeoutException as e:
                     logger.warning(f"Timeout waiting for search results for '{user_product}': {str(e)}")
@@ -129,11 +130,11 @@ def make_dish():
 
                 try:
                     # Находим первый элемент результата поиска
-                    element = driver.find_element(By.XPATH, "//div[contains(@class, 'search')]//div[contains(@class, 'item')]")
+                    element = driver.find_element(By.XPATH, "//div[contains(@class, 'ProductCard')]")
                     link_element = element.find_element(By.TAG_NAME, "a")
                     link_href = link_element.get_attribute("href")
                     full_url = link_href if link_href.startswith("https://") else f"https://lavka.yandex.ru{link_href}"
-                    link_text = link_element.find_element(By.XPATH, ".//span[contains(@class, 'title')] | .//div[contains(@class, 'title')]").text.strip()
+                    link_text = link_element.find_element(By.XPATH, ".//span[contains(@class, 'Title')] | .//div[contains(@class, 'Title')]").text.strip()
 
                     logger.info(f"Navigating to product page: {full_url}")
                     driver.get(full_url)
@@ -143,7 +144,7 @@ def make_dish():
 
                     price = "Цена не найдена"
                     try:
-                        price_element = driver.find_element(By.XPATH, "//*[contains(@class, 'price')]")
+                        price_element = driver.find_element(By.XPATH, "//div[contains(@class, 'Price')]//span")
                         price_text = price_element.text
                         price_match = re.search(r'(\d+\s*₽)', price_text)
                         price = price_match.group(1) if price_match else "Цена не найдена"
@@ -152,7 +153,7 @@ def make_dish():
 
                     description = "Описание отсутствует"
                     try:
-                        desc_element = driver.find_element(By.XPATH, "//*[contains(@class, 'description')] | //*[contains(@class, 'text')]")
+                        desc_element = driver.find_element(By.XPATH, "//div[contains(@class, 'Description')] | //p[contains(@class, 'Text')]")
                         description = desc_element.text.strip()
                     except Exception as e:
                         logger.warning(f"Description not found for '{link_text}': {str(e)}")
@@ -160,7 +161,7 @@ def make_dish():
                     img_src = "https://via.placeholder.com/150"
                     try:
                         image_container = WebDriverWait(driver, 30).until(
-                            EC.presence_of_element_located((By.XPATH, "//img[contains(@class, 'product-image')] | //div[contains(@class, 'image')]//img"))
+                            EC.presence_of_element_located((By.XPATH, "//img[contains(@class, 'Image')]"))
                         )
                         img_src = image_container.get_attribute("src")
                     except TimeoutException as e:
