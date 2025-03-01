@@ -88,6 +88,8 @@ def make_dish():
         chrome_options.add_argument("--disable-gpu")
         chrome_options.add_argument("user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36")
         chrome_options.add_argument("--disable-blink-features=AutomationControlled")
+        chrome_options.add_argument("--start-maximized")
+        chrome_options.add_argument("--disable-extensions")
         try:
             driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=chrome_options)
             logger.info("Chromedriver initialized successfully")
@@ -111,9 +113,9 @@ def make_dish():
                 )
 
                 try:
-                    # Используем точный класс из вашего описания
+                    # Ожидаем видимость результата поиска
                     WebDriverWait(driver, 30).until(
-                        EC.presence_of_element_located((By.CLASS_NAME, "cbuk31w.pyi2ep2.l1ucbhj1.v1y5jj7x"))
+                        EC.visibility_of_element_located((By.CLASS_NAME, "cbuk31w.pyi2ep2.l1ucbhj1.v1y5jj7x"))
                     )
                     logger.info("Search results found")
                 except TimeoutException as e:
@@ -145,25 +147,33 @@ def make_dish():
 
                     price = "Цена не найдена"
                     try:
-                        price_element = driver.find_element(By.CLASS_NAME, "c17r1xrr")
+                        price_element = WebDriverWait(driver, 30).until(
+                            EC.visibility_of_element_located((By.CLASS_NAME, "c17r1xrr"))
+                        )
                         price_text = price_element.text
                         price_match = re.search(r'(\d+\s*₽)', price_text)
                         price = price_match.group(1) if price_match else "Цена не найдена"
+                    except TimeoutException as e:
+                        logger.warning(f"Price not found for '{link_text}', timeout: {str(e)}")
                     except Exception as e:
                         logger.warning(f"Price not found for '{link_text}': {str(e)}")
 
                     description = "Описание отсутствует"
                     try:
-                        desc_element = driver.find_element(By.CLASS_NAME, "c17r1xrr")
+                        desc_element = WebDriverWait(driver, 30).until(
+                            EC.visibility_of_element_located((By.CLASS_NAME, "c17r1xrr"))
+                        )
                         description = re.sub(r'.*₽.*$', '', desc_element.text, flags=re.MULTILINE).strip()
                         description = re.sub(r'В корзину', '', description).strip() or "Описание отсутствует"
+                    except TimeoutException as e:
+                        logger.warning(f"Description not found for '{link_text}', timeout: {str(e)}")
                     except Exception as e:
                         logger.warning(f"Description not found for '{link_text}': {str(e)}")
 
                     img_src = "https://via.placeholder.com/150"
                     try:
                         image_container = WebDriverWait(driver, 30).until(
-                            EC.presence_of_element_located((By.CLASS_NAME, "ibhxbmx.p1wkliaw"))
+                            EC.visibility_of_element_located((By.CLASS_NAME, "ibhxbmx.p1wkliaw"))
                         )
                         img_src = image_container.find_element(By.TAG_NAME, "img").get_attribute("src")
                     except TimeoutException as e:
