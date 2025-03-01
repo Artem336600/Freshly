@@ -91,6 +91,8 @@ def make_dish():
             chrome_options.add_argument("--disable-blink-features=AutomationControlled")
             chrome_options.add_argument("--start-maximized")
             chrome_options.add_argument("--disable-extensions")
+            # Добавляем прокси (укажите свой прокси, если есть)
+            # chrome_options.add_argument("--proxy-server=http://your_proxy:port")
             try:
                 driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=chrome_options)
                 logger.info("Chromedriver initialized successfully for product: " + product["name"])
@@ -122,11 +124,26 @@ def make_dish():
 
                 # Логируем HTML для отладки
                 page_source = driver.page_source
-                logger.info(f"Page source excerpt for '{user_product}': {page_source[:500]}")
+                logger.info(f"Page source excerpt for '{user_product}': {page_source[:1000]}")
+
+                # Проверяем наличие капчи
+                if "Are you not a robot?" in page_source:
+                    logger.warning(f"Captcha detected for '{user_product}'")
+                    product_data = {
+                        "name": user_product,
+                        "category": category,
+                        "price": "Цена не найдена (капча)",
+                        "description": "Описание отсутствует (капча)",
+                        "image": "https://via.placeholder.com/150"
+                    }
+                    matched_products.append(product_data)
+                    logger.info(f"Product info: {json.dumps(product_data, ensure_ascii=False)}")
+                    driver.quit()
+                    time.sleep(1)
+                    continue
 
                 try:
-                    # Пробуем найти результат поиска с несколькими попытками
-                    for _ in range(2):  # 2 попытки
+                    for _ in range(2):
                         try:
                             WebDriverWait(driver, 40).until(
                                 EC.visibility_of_element_located((By.CLASS_NAME, "cbuk31w.pyi2ep2.l1ucbhj1.v1y5jj7x"))
@@ -134,7 +151,7 @@ def make_dish():
                             logger.info("Search results found")
                             break
                         except TimeoutException:
-                            logger.info("Retrying search results for '{user_product}'...")
+                            logger.info(f"Retrying search results for '{user_product}'...")
                             time.sleep(2)
                     else:
                         raise TimeoutException("Search results not found after retries")
@@ -213,7 +230,7 @@ def make_dish():
                 logger.info(f"Product info: {json.dumps(product_data, ensure_ascii=False)}")
 
                 driver.quit()
-                time.sleep(1)  # Задержка перед следующим продуктом
+                time.sleep(1)
 
             except Exception as e:
                 logger.error(f"Ошибка при поиске '{user_product}': {str(e)}")
