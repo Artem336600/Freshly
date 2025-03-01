@@ -6,9 +6,11 @@ import time
 import os
 import logging
 import random
-from mistralai import Mistral
 import requests
 from bs4 import BeautifulSoup
+from mistralai import Mistral
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
 
 # Настройка логирования
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -103,13 +105,18 @@ def get_product():
             logger.warning("Name or category missing")
             return jsonify({"error": "Ошибка: Укажите название продукта и категорию."}), 400
 
+        session = requests.Session()
+        retries = Retry(total=3, backoff_factor=1, status_forcelist=[500, 502, 503, 504])
+        session.mount("http://", HTTPAdapter(max_retries=retries))
+        session.mount("https://", HTTPAdapter(max_retries=retries))
+
         headers = {
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
         }
-        proxies = {"http": random.choice(PROXY_LIST)} if PROXY_LIST else None
+        proxies = {"http": random.choice(PROXY_LIST), "https": random.choice(PROXY_LIST)} if PROXY_LIST else None
         search_url = f"https://lavka.yandex.ru/search?text={user_product}"
 
-        response = requests.get(search_url, headers=headers, proxies=proxies, timeout=10)
+        response = session.get(search_url, headers=headers, proxies=proxies, timeout=15)
         logger.info(f"Response status for '{user_product}': {response.status_code}")
 
         if response.status_code != 200:
@@ -153,7 +160,7 @@ def get_product():
         link = product_div.find("a")["href"]
         full_url = link if link.startswith("https://") else f"https://lavka.yandex.ru{link}"
 
-        product_response = requests.get(full_url, headers=headers, proxies=proxies, timeout=10)
+        product_response = session.get(full_url, headers=headers, proxies=proxies, timeout=15)
         product_soup = BeautifulSoup(product_response.text, 'html.parser')
 
         price = "Цена не найдена"
