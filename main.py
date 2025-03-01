@@ -1,80 +1,105 @@
-from flask import Flask, request, jsonify, make_response
-from flask_cors import CORS
+from flask import Flask, request, jsonify, send_from_directory
+import requests
 import json
 import re
-import logging
-from mistralai import Mistral
+import time
+from bs4 import BeautifulSoup
+import threading
+import webbrowser  # Добавлен импорт webbrowser
 
-# Настройка логирования
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
-logger = logging.getLogger(__name__)
+app = Flask(__name__, static_folder='.')
+SERVER_URL = "https://freshly-production.up.railway.app/make_prod"
 
-# Данные для подключения к Mistral
-api_key = 'smKrnj6cMHni2QSNHZjIBInPlyErMHSu'
-model = "mistral-small-latest"
-client = Mistral(api_key=api_key)
-
-app = Flask(__name__)
-CORS(app, resources={r"/*": {"origins": "*"}})
-
-DISH_CATEGORIES = ["Закуски", "Супы", "Основные блюда", "Гарниры", "Десерты", "Напитки", "Салаты", "Блюда на гриле"]
-
-@app.after_request
-def add_cors_headers(response):
-    response.headers['Access-Control-Allow-Origin'] = '*'
-    response.headers['Access-Control-Allow-Methods'] = 'POST, OPTIONS'
-    response.headers['Access-Control-Allow-Headers'] = 'Content-Type'
-    return response
-
-@app.route('/make_prod', methods=['POST', 'OPTIONS'])
-def make_prod():
-    if request.method == 'OPTIONS':
-        return make_response('', 200)
-
+def fetch_product_info(product_name, category):
+    search_url = f"https://www.google.com/search?q={product_name}+Яндекс+Лавка"
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
+    }
     try:
-        data = request.get_json()
-        user_message = data.get('message')
-        logger.info(f"Received message: {user_message}")
-        
-        if not user_message:
-            logger.warning("No message provided")
-            return jsonify({"error": "Ошибка: Введите вопрос."}), 400
+        response = requests.get(search_url, headers=headers, timeout=10)
+        soup = BeautifulSoup(response.text, 'html.parser')
 
-        system_message = (
-            f"Ты помощник по подбору еды для Smart Food Ecosystem. "
-            f"На основе запроса пользователя сформируй продуктовый набор, придумывая названия продуктов. "
-            f"Учитывай категории, теги и пожелания из запроса. "
-            f"Ответ должен быть в формате JSON: "
-            f"\"message\": \"Подобраны продукты\", \"products\": [{{\"name\": \"название продукта\", \"category\": \"категория\"}}, ...]}}. "
-            f"Если в запросе указаны категории с количеством, возвращай точное число продуктов для каждой категории. "
-            f"Если категорий нет, возвращай минимум 3 продукта."
-        )
-        user_prompt = f"Запрос пользователя: {user_message}"
-        logger.info(f"Prompt length: {len(user_prompt)}")
+        link = None
+        for a in soup.find_all("a", href=True):
+            if "lavka.yandex.ru" in a["href"]:
+                link = re.sub(r'^/url\?q=([^&]+).*', r'\1', a["href"])
+                break
 
-        chat_response = client.chat.complete(
-            model=model,
-            messages=[
-                {"role": "system", "content": system_message},
-                {"role": "user", "content": user_prompt}
-            ]
-        )
-        response_text = chat_response.choices[0].message.content.strip()
-        logger.info(f"Raw AI response: {response_text}")
+        if not link:
+            return {
+                "name": product_name,
+                "category": category,
+                "price": "Цена не найдена",
+                "description": "Описание отсутствует",
+                "image": "https://via.placeholder.com/150"
+            }
 
-        cleaned_response = re.sub(r'```json\s*|\s*```', '', response_text).strip()
-        ai_result = json.loads(cleaned_response)
-        logger.info(f"Parsed AI response: {json.dumps(ai_result, ensure_ascii=False)}")
+        product_response = requests.get(link, headers=headers, timeout=10)
+        product_soup = BeautifulSoup(product_response.text, 'html.parser')
 
-        if not isinstance(ai_result, dict) or "message" not in ai_result or "products" not in ai_result:
-            logger.error("Invalid AI response format")
-            return jsonify({"error": "Ошибка: Некорректный формат ответа от ИИ."}), 500
+        price = "Цена не найдена"
+        price_elem = product_soup.find("div", class_="c17r1xrr")
+        if price_elem:
+            price_text = price_elem.text
+            price_match = re.search(r'(\d+\s*₽)', price_text)
+            price = price_match.group(1) if price_match else "Цена не найдена"
 
-        return jsonify(ai_result)
+        description = "Описание отсутствует"
+        if price_elem:
+            description = re.sub(r'.*₽.*$', '', price_elem.text, flags=re.MULTILINE).strip()
+            description = re.sub(r'В корзину', '', description).strip() or "Описание отсутствует"
 
+        img_src = "https://via.placeholder.com/150"
+        img_elem = product_soup.find("div", class_="ibhxbmx p1wkliaw")
+        if img_elem:
+            img = img_elem.find("img")
+            if img and "src" in img.attrs:
+                img_src = img["src"]
+
+        return {
+            "name": product_name,
+            "category": category,
+            "price": price,
+            "description": description,
+            "image": img_src
+        }
     except Exception as e:
-        logger.error(f"Error occurred: {str(e)}")
-        return jsonify({"error": f"Произошла ошибка: {str(e)}"}), 500
+        print(f"Ошибка при получении данных для '{product_name}': {e}")
+        return {
+            "name": product_name,
+            "category": category,
+            "price": "Цена не найдена",
+            "description": "Описание отсутствует",
+            "image": "https://via.placeholder.com/150"
+        }
 
-if __name__ == '__main__':
-    app.run(debug=True, host="0.0.0.0", port=int(os.getenv("PORT", 5000)))
+@app.route('/')
+def serve_index():
+    return send_from_directory('.', 'index.html')
+
+@app.route('/make_prod', methods=['POST'])
+def make_prod():
+    data = request.get_json()
+    message = data.get('message')
+    headers = {"Content-Type": "application/json"}
+    response = requests.post(SERVER_URL, headers=headers, json={"message": message})
+    if response.status_code == 200:
+        return jsonify(response.json())
+    return jsonify({"error": "Ошибка сервера"}), 500
+
+@app.route('/get_product', methods=['POST'])
+def get_product():
+    data = request.get_json()
+    product_name = data.get('name')
+    category = data.get('category')
+    product_info = fetch_product_info(product_name, category)
+    return jsonify(product_info)
+
+def run_server():
+    app.run(host='0.0.0.0', port=5000)
+
+if __name__ == "__main__":
+    threading.Thread(target=run_server, daemon=True).start()
+    print("Локальный сервер запущен на http://localhost:5000")
+    time.sleep(1)  # Даём серверу время запуститься
+    webbrowser.open("http://localhost:5000")
