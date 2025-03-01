@@ -5,9 +5,9 @@ import re
 import time
 import os
 import logging
-import requests
-from bs4 import BeautifulSoup
+import random
 from mistralai import Mistral
+from requests_html import HTMLSession
 
 # Настройка логирования
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -17,6 +17,13 @@ logger = logging.getLogger(__name__)
 api_key = 'smKrnj6cMHni2QSNHZjIBInPlyErMHSu'
 model = "mistral-small-latest"
 client = Mistral(api_key=api_key)
+
+# Список прокси (обновите с рабочими)
+PROXY_LIST = [
+    "http://190.61.88.147:8080",
+    "http://185.199.229.156:7492",
+    # Добавьте свои прокси
+]
 
 app = Flask(__name__)
 CORS(app, resources={r"/*": {"origins": "*"}})
@@ -95,11 +102,15 @@ def get_product():
             logger.warning("Name or category missing")
             return jsonify({"error": "Ошибка: Укажите название продукта и категорию."}), 400
 
+        session = HTMLSession()
         headers = {
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
         }
+        proxies = {"http": random.choice(PROXY_LIST)} if PROXY_LIST else None
         search_url = f"https://lavka.yandex.ru/search?text={user_product}"
-        response = requests.get(search_url, headers=headers, timeout=10)
+
+        response = session.get(search_url, headers=headers, proxies=proxies, timeout=10)
+        response.html.render(timeout=20)  # Рендеринг JavaScript
         logger.info(f"Response status for '{user_product}': {response.status_code}")
 
         if response.status_code != 200:
@@ -113,10 +124,10 @@ def get_product():
             }
             return jsonify(product_data)
 
-        soup = BeautifulSoup(response.text, 'html.parser')
-        logger.info(f"Page excerpt for '{user_product}': {response.text[:1000]}")
+        soup = response.html
+        logger.info(f"Page excerpt for '{user_product}': {soup.text[:1000]}")
 
-        if "Are you not a robot?" in response.text:
+        if "Are you not a robot?" in soup.text:
             logger.warning(f"Captcha detected for '{user_product}'")
             product_data = {
                 "name": user_product,
@@ -143,9 +154,9 @@ def get_product():
         link = product_div.find("a")["href"]
         full_url = link if link.startswith("https://") else f"https://lavka.yandex.ru{link}"
 
-        # Переход на страницу продукта
-        product_response = requests.get(full_url, headers=headers, timeout=10)
-        product_soup = BeautifulSoup(product_response.text, 'html.parser')
+        product_response = session.get(full_url, headers=headers, proxies=proxies, timeout=10)
+        product_response.html.render(timeout=20)
+        product_soup = product_response.html
 
         price = "Цена не найдена"
         price_elem = product_soup.find("div", class_="c17r1xrr")
