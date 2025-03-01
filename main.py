@@ -82,7 +82,6 @@ def make_dish():
 
         matched_products = []
         for product in ai_result["products"]:
-            # Создаём новый экземпляр chromedriver для каждого продукта
             chrome_options = Options()
             chrome_options.add_argument("--headless")
             chrome_options.add_argument("--no-sandbox")
@@ -117,15 +116,29 @@ def make_dish():
                 driver.get(search_url)
 
                 # Ожидаем полной загрузки страницы
-                WebDriverWait(driver, 30).until(
+                WebDriverWait(driver, 40).until(
                     lambda driver: driver.execute_script("return document.readyState") == "complete"
                 )
 
+                # Логируем HTML для отладки
+                page_source = driver.page_source
+                logger.info(f"Page source excerpt for '{user_product}': {page_source[:500]}")
+
                 try:
-                    WebDriverWait(driver, 30).until(
-                        EC.visibility_of_element_located((By.CLASS_NAME, "cbuk31w.pyi2ep2.l1ucbhj1.v1y5jj7x"))
-                    )
-                    logger.info("Search results found")
+                    # Пробуем найти результат поиска с несколькими попытками
+                    for _ in range(2):  # 2 попытки
+                        try:
+                            WebDriverWait(driver, 40).until(
+                                EC.visibility_of_element_located((By.CLASS_NAME, "cbuk31w.pyi2ep2.l1ucbhj1.v1y5jj7x"))
+                            )
+                            logger.info("Search results found")
+                            break
+                        except TimeoutException:
+                            logger.info("Retrying search results for '{user_product}'...")
+                            time.sleep(2)
+                    else:
+                        raise TimeoutException("Search results not found after retries")
+
                 except TimeoutException as e:
                     logger.warning(f"Timeout waiting for search results for '{user_product}': {str(e)}")
                     product_data = {
@@ -138,7 +151,7 @@ def make_dish():
                     matched_products.append(product_data)
                     logger.info(f"Product info: {json.dumps(product_data, ensure_ascii=False)}")
                     driver.quit()
-                    time.sleep(1)  # Задержка перед следующим продуктом
+                    time.sleep(1)
                     continue
 
                 element = driver.find_element(By.CLASS_NAME, "cbuk31w.pyi2ep2.l1ucbhj1.v1y5jj7x")
@@ -149,13 +162,13 @@ def make_dish():
 
                 logger.info(f"Navigating to product page: {full_url}")
                 driver.get(full_url)
-                WebDriverWait(driver, 30).until(
+                WebDriverWait(driver, 40).until(
                     lambda driver: driver.execute_script("return document.readyState") == "complete"
                 )
 
                 price = "Цена не найдена"
                 try:
-                    price_element = WebDriverWait(driver, 30).until(
+                    price_element = WebDriverWait(driver, 40).until(
                         EC.visibility_of_element_located((By.CLASS_NAME, "c17r1xrr"))
                     )
                     price_text = price_element.text
@@ -168,7 +181,7 @@ def make_dish():
 
                 description = "Описание отсутствует"
                 try:
-                    desc_element = WebDriverWait(driver, 30).until(
+                    desc_element = WebDriverWait(driver, 40).until(
                         EC.visibility_of_element_located((By.CLASS_NAME, "c17r1xrr"))
                     )
                     description = re.sub(r'.*₽.*$', '', desc_element.text, flags=re.MULTILINE).strip()
@@ -180,7 +193,7 @@ def make_dish():
 
                 img_src = "https://via.placeholder.com/150"
                 try:
-                    image_container = WebDriverWait(driver, 30).until(
+                    image_container = WebDriverWait(driver, 40).until(
                         EC.visibility_of_element_located((By.CLASS_NAME, "ibhxbmx.p1wkliaw"))
                     )
                     img_src = image_container.find_element(By.TAG_NAME, "img").get_attribute("src")
@@ -214,7 +227,7 @@ def make_dish():
                 matched_products.append(product_data)
                 logger.info(f"Product info: {json.dumps(product_data, ensure_ascii=False)}")
                 driver.quit()
-                time.sleep(1)  # Задержка перед следующим продуктом
+                time.sleep(1)
 
         final_result = {
             "message": "Подобраны продукты с сайта Яндекс Лавка",
