@@ -109,7 +109,7 @@ def make_dish():
                 WebDriverWait(driver, 60).until(
                     lambda driver: driver.execute_script("return document.readyState") == "complete"
                 )
-                time.sleep(3)  # Дополнительная задержка для полной загрузки
+                time.sleep(5)  # Дополнительная задержка для полной загрузки
 
                 page_source = driver.page_source
                 logger.info(f"Page source excerpt for '{user_product}': {page_source[:1000]}")
