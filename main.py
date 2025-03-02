@@ -5,6 +5,8 @@ import re
 import time
 import os
 import logging
+import random
+import tempfile
 from mistralai import Mistral
 from selenium import webdriver
 from selenium.webdriver.common.by import By
@@ -78,13 +80,17 @@ def make_dish():
             logger.error("Invalid AI response format")
             return jsonify({"error": "Ошибка: Некорректный формат ответа от ИИ."}), 500
 
+        # Создаём временную директорию для данных Chrome
+        temp_dir = tempfile.mkdtemp()
+        logger.info(f"Using temporary user data dir: {temp_dir}")
+
         # Настройка веб-драйвера
         chrome_options = Options()
-        # Закомментируем headless для теста
-        # chrome_options.add_argument("--headless")
+        chrome_options.add_argument("--headless")  # Возвращаем headless
         chrome_options.add_argument("--no-sandbox")
         chrome_options.add_argument("--disable-dev-shm-usage")
         chrome_options.add_argument("--disable-gpu")
+        chrome_options.add_argument(f"--user-data-dir={temp_dir}")  # Уникальная директория
         chrome_options.add_argument("user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36")
         chrome_options.add_argument("--disable-blink-features=AutomationControlled")
         chrome_options.add_experimental_option("excludeSwitches", ["enable-automation"])
@@ -140,8 +146,12 @@ def make_dish():
                     driver.get(full_url)
                     time.sleep(10)  # Ждём загрузки страницы товара
 
+                    # Дополнительная прокрутка для рендеринга
+                    driver.execute_script("window.scrollTo(0, document.body.scrollHeight / 2);")
+                    time.sleep(5)
+
                     page_source = driver.page_source
-                    logger.info(f"Product page source for '{link_text}': {page_source[:2000]}")  # Увеличим отрывок для отладки
+                    logger.info(f"Product page source for '{link_text}': {page_source[:2000]}")
 
                     price = "Цена не найдена"
                     try:
@@ -197,6 +207,9 @@ def make_dish():
 
         finally:
             driver.quit()
+            # Удаляем временную директорию
+            if os.path.exists(temp_dir):
+                os.rmdir(temp_dir)
 
     except Exception as e:
         logger.error(f"Error occurred: {str(e)}")
