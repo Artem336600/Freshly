@@ -5,17 +5,13 @@ import re
 import time
 import os
 import logging
-import random
 from mistralai import Mistral
 from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.chrome.service import Service
 from webdriver_manager.chrome import ChromeDriverManager
-from selenium.webdriver.support.ui import WebDriverWait
-from selenium.webdriver.support import expected_conditions as EC
-from selenium.common.exceptions import TimeoutException, WebDriverException
-from selenium.webdriver.common.action_chains import ActionChains
+from selenium.common.exceptions import WebDriverException
 
 # Настройка логирования
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -96,14 +92,6 @@ def make_dish():
         try:
             driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=chrome_options)
             logger.info("Chromedriver initialized successfully")
-
-            driver.execute_cdp_cmd("Page.addScriptToEvaluateOnNewDocument", {
-                "source": """
-                    Object.defineProperty(navigator, 'webdriver', {
-                        get: () => undefined
-                    })
-                """
-            })
         except WebDriverException as e:
             logger.error(f"Failed to initialize chromedriver: {str(e)}")
             return jsonify({"error": f"Ошибка инициализации chromedriver: {str(e)}"}), 500
@@ -123,13 +111,7 @@ def make_dish():
                 
                 logger.info(f"Searching for: {user_product} at {search_url}")
                 driver.get(search_url)
-                time.sleep(random.uniform(3, 6))
-
-                driver.execute_script("window.scrollTo(0, document.body.scrollHeight / 2);")
-                time.sleep(random.uniform(2, 4))
-                actions = ActionChains(driver)
-                actions.move_by_offset(random.randint(50, 200), random.randint(50, 200)).click().perform()
-                time.sleep(random.uniform(1, 3))
+                time.sleep(5)  # Ждём загрузки страницы поиска
 
                 page_source = driver.page_source
                 logger.info(f"Page source excerpt for '{user_product}': {page_source[:1000]}")
@@ -146,43 +128,19 @@ def make_dish():
                     matched_products.append(product_data)
                     continue
 
-                results_found = driver.execute_script(
-                    "return document.getElementsByClassName('cbuk31w pyi2ep2 l1ucbhj1 v1y5jj7x').length > 0;"
-                )
-                if not results_found:
-                    logger.warning(f"No search results found for '{user_product}'")
-                    product_data = {
-                        "name": user_product,
-                        "category": category,
-                        "price": "Цена не найдена",
-                        "description": "Описание отсутствует",
-                        "image": "https://via.placeholder.com/150"
-                    }
-                    matched_products.append(product_data)
-                    continue
-
                 try:
                     element = driver.find_element(By.CLASS_NAME, "cbuk31w.pyi2ep2.l1ucbhj1.v1y5jj7x")
                     link_element = element.find_element(By.TAG_NAME, "a")
                     link_href = link_element.get_attribute("href")
                     full_url = link_href if link_href.startswith("https://") else f"https://lavka.yandex.ru{link_href}"
-                    
-                    try:
-                        link_text = link_element.find_element(By.TAG_NAME, "span").text.strip()
-                        if not link_text:
-                            link_text = link_element.text.strip()
-                    except:
-                        link_text = user_product
-                        logger.warning(f"Failed to extract product name, using '{user_product}'")
+                    link_text = link_element.text.strip() or user_product
 
                     logger.info(f"Navigating to product page: {full_url}")
                     driver.get(full_url)
-                    time.sleep(10)  # Увеличенная задержка для полной загрузки
+                    time.sleep(10)  # Ждём загрузки страницы товара
 
-                    # Ожидание появления элементов
-                    WebDriverWait(driver, 30).until(
-                        lambda d: d.execute_script("return document.getElementsByClassName('c17r1xrr').length > 0 || document.getElementsByClassName('ibhxbmx p1wkliaw').length > 0;")
-                    )
+                    page_source = driver.page_source
+                    logger.info(f"Product page source excerpt for '{link_text}': {page_source[:1000]}")
 
                     price = "Цена не найдена"
                     try:
