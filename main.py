@@ -86,11 +86,11 @@ def make_dish():
 
         # Настройка веб-драйвера
         chrome_options = Options()
-        chrome_options.add_argument("--headless")  # Возвращаем headless
+        chrome_options.add_argument("--headless")
         chrome_options.add_argument("--no-sandbox")
         chrome_options.add_argument("--disable-dev-shm-usage")
         chrome_options.add_argument("--disable-gpu")
-        chrome_options.add_argument(f"--user-data-dir={temp_dir}")  # Уникальная директория
+        chrome_options.add_argument(f"--user-data-dir={temp_dir}")
         chrome_options.add_argument("user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36")
         chrome_options.add_argument("--disable-blink-features=AutomationControlled")
         chrome_options.add_experimental_option("excludeSwitches", ["enable-automation"])
@@ -118,17 +118,17 @@ def make_dish():
                 
                 logger.info(f"Searching for: {user_product} at {search_url}")
                 driver.get(search_url)
-                time.sleep(5)  # Ждём загрузки страницы поиска
+                time.sleep(5)
 
                 page_source = driver.page_source
                 logger.info(f"Page source excerpt for '{user_product}': {page_source[:1000]}")
 
                 if "Are you not a robot?" in page_source:
-                    logger.warning(f"Captcha detected for '{user_product}'")
+                    logger.warning(f"Captcha detected on search page for '{user_product}'")
                     product_data = {
                         "name": user_product,
                         "category": category,
-                        "price": "Цена не найдена (капча)",
+                        "price": "Цена не найдена (капча на странице поиска)",
                         "description": "Описание отсутствует (капча)",
                         "image": "https://via.placeholder.com/150"
                     }
@@ -144,14 +144,25 @@ def make_dish():
 
                     logger.info(f"Navigating to product page: {full_url}")
                     driver.get(full_url)
-                    time.sleep(10)  # Ждём загрузки страницы товара
+                    time.sleep(10)
 
-                    # Дополнительная прокрутка для рендеринга
                     driver.execute_script("window.scrollTo(0, document.body.scrollHeight / 2);")
                     time.sleep(5)
 
                     page_source = driver.page_source
                     logger.info(f"Product page source for '{link_text}': {page_source[:2000]}")
+
+                    if "Are you not a robot?" in page_source:
+                        logger.warning(f"Captcha detected on product page for '{link_text}'")
+                        product_data = {
+                            "name": link_text,
+                            "category": category,
+                            "price": "Цена не найдена (капча на странице товара)",
+                            "description": "Описание отсутствует (капча)",
+                            "image": "https://via.placeholder.com/150"
+                        }
+                        matched_products.append(product_data)
+                        continue
 
                     price = "Цена не найдена"
                     try:
@@ -207,7 +218,6 @@ def make_dish():
 
         finally:
             driver.quit()
-            # Удаляем временную директорию
             if os.path.exists(temp_dir):
                 os.rmdir(temp_dir)
 
