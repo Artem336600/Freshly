@@ -167,31 +167,30 @@ def make_dish():
                     link_href = link_element.get_attribute("href")
                     full_url = link_href if link_href.startswith("https://") else f"https://lavka.yandex.ru{link_href}"
                     
-                    # Проверяем название через более общий селектор
                     try:
                         link_text = link_element.find_element(By.TAG_NAME, "span").text.strip()
                         if not link_text:
                             link_text = link_element.text.strip()
                     except:
-                        link_text = user_product  # Запасной вариант
+                        link_text = user_product
                         logger.warning(f"Failed to extract product name, using '{user_product}'")
 
                     logger.info(f"Navigating to product page: {full_url}")
                     driver.get(full_url)
-                    time.sleep(5)  # Фиксированная задержка
+                    time.sleep(10)  # Увеличенная задержка для полной загрузки
 
-                    driver.execute_script("window.scrollTo(0, document.body.scrollHeight / 3);")
-                    time.sleep(2)
+                    # Ожидание появления элементов
+                    WebDriverWait(driver, 30).until(
+                        lambda d: d.execute_script("return document.getElementsByClassName('c17r1xrr').length > 0 || document.getElementsByClassName('ibhxbmx p1wkliaw').length > 0;")
+                    )
 
                     price = "Цена не найдена"
                     try:
-                        price_element = WebDriverWait(driver, 30).until(
-                            EC.presence_of_element_located((By.CLASS_NAME, "c17r1xrr"))
-                        )
+                        price_element = driver.find_element(By.CLASS_NAME, "c17r1xrr")
                         price_text = price_element.text
                         price_match = re.search(r'(\d+\s*₽)', price_text)
                         price = price_match.group(1) if price_match else "Цена не найдена"
-                    except TimeoutException:
+                    except:
                         logger.warning(f"Price element 'c17r1xrr' not found for '{link_text}'")
 
                     description = "Описание отсутствует"
