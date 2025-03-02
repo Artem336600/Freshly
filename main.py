@@ -105,11 +105,11 @@ def make_dish():
                 logger.info(f"Searching for: {user_product} at {search_url}")
                 driver.get(search_url)
 
-                # Увеличиваем время ожидания до 40 секунд
-                WebDriverWait(driver, 40).until(
+                # Увеличиваем время ожидания до 60 секунд
+                WebDriverWait(driver, 60).until(
                     lambda driver: driver.execute_script("return document.readyState") == "complete"
                 )
-                time.sleep(2)  # Дополнительная задержка для полной загрузки
+                time.sleep(3)  # Дополнительная задержка для полной загрузки
 
                 page_source = driver.page_source
                 logger.info(f"Page source excerpt for '{user_product}': {page_source[:1000]}")
@@ -128,7 +128,7 @@ def make_dish():
                     continue
 
                 try:
-                    WebDriverWait(driver, 40).until(
+                    WebDriverWait(driver, 60).until(
                         EC.visibility_of_element_located((By.CLASS_NAME, "cbuk31w.pyi2ep2.l1ucbhj1.v1y5jj7x"))
                     )
                     logger.info("Search results found")
@@ -153,13 +153,13 @@ def make_dish():
 
                     logger.info(f"Navigating to product page: {full_url}")
                     driver.get(full_url)
-                    WebDriverWait(driver, 40).until(
+                    WebDriverWait(driver, 60).until(
                         lambda driver: driver.execute_script("return document.readyState") == "complete"
                     )
 
                     price = "Цена не найдена"
                     try:
-                        price_element = WebDriverWait(driver, 40).until(
+                        price_element = WebDriverWait(driver, 60).until(
                             EC.visibility_of_element_located((By.CLASS_NAME, "c17r1xrr"))
                         )
                         price_text = price_element.text
@@ -170,7 +170,7 @@ def make_dish():
 
                     description = "Описание отсутствует"
                     try:
-                        desc_element = WebDriverWait(driver, 40).until(
+                        desc_element = WebDriverWait(driver, 60).until(
                             EC.visibility_of_element_located((By.CLASS_NAME, "c17r1xrr"))
                         )
                         description = re.sub(r'.*₽.*$', '', desc_element.text, flags=re.MULTILINE).strip()
@@ -180,7 +180,7 @@ def make_dish():
 
                     img_src = "https://via.placeholder.com/150"
                     try:
-                        image_container = WebDriverWait(driver, 40).until(
+                        image_container = WebDriverWait(driver, 60).until(
                             EC.visibility_of_element_located((By.CLASS_NAME, "ibhxbmx.p1wkliaw"))
                         )
                         img_src = image_container.find_element(By.TAG_NAME, "img").get_attribute("src")
