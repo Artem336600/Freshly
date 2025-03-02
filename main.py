@@ -88,8 +88,6 @@ def make_dish():
         chrome_options.add_argument("--no-sandbox")
         chrome_options.add_argument("--disable-dev-shm-usage")
         chrome_options.add_argument("--disable-gpu")
-        
-        # Подмена отпечатка браузера
         chrome_options.add_argument("user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36")
         chrome_options.add_argument("--disable-blink-features=AutomationControlled")
         chrome_options.add_experimental_option("excludeSwitches", ["enable-automation"])
@@ -122,20 +120,21 @@ def make_dish():
                 driver.get(search_url)
 
                 # Случайная задержка перед загрузкой
-                time.sleep(random.uniform(2, 5))
+                time.sleep(random.uniform(3, 6))
 
+                # Ожидание полной загрузки через JavaScript
                 WebDriverWait(driver, 60).until(
                     lambda driver: driver.execute_script("return document.readyState") == "complete"
                 )
 
                 # Имитация прокрутки страницы
                 driver.execute_script("window.scrollTo(0, document.body.scrollHeight / 2);")
-                time.sleep(random.uniform(1, 3))  # Случайная пауза после прокрутки
+                time.sleep(random.uniform(2, 4))
 
-                # Имитация движения мыши
+                # Имитация движения мыши и клика
                 actions = ActionChains(driver)
-                actions.move_by_offset(random.randint(50, 200), random.randint(50, 200)).perform()
-                time.sleep(random.uniform(0.5, 1.5))
+                actions.move_by_offset(random.randint(50, 200), random.randint(50, 200)).click().perform()
+                time.sleep(random.uniform(1, 3))
 
                 page_source = driver.page_source
                 logger.info(f"Page source excerpt for '{user_product}': {page_source[:1000]}")
@@ -143,23 +142,21 @@ def make_dish():
                 # Проверка на капчу
                 if "Are you not a robot?" in page_source:
                     logger.warning(f"Captcha detected for '{user_product}'")
-                    product_data = {
-                        "name": user_product,
-                        "category": category,
-                        "price": "Цена не найдена (капча)",
-                        "description": "Описание отсутствует (капча)",
-                        "image": "https://via.placeholder.com/150"
-                    }
-                    matched_products.append(product_data)
-                    continue
+                    # Попытка кликнуть случайный элемент для имитации активности
+                    try:
+                        random_element = driver.find_element(By.TAG_NAME, "a")
+                        actions.move_to_element(random_element).click().perform()
+                        time.sleep(random.uniform(2, 5))
+                        page_source = driver.page_source  # Обновляем источник
+                    except:
+                        pass
 
-                try:
-                    WebDriverWait(driver, 60).until(
-                        EC.visibility_of_element_located((By.CLASS_NAME, "cbuk31w.pyi2ep2.l1ucbhj1.v1y5jj7x"))
-                    )
-                    logger.info("Search results found")
-                except TimeoutException as e:
-                    logger.warning(f"Timeout waiting for search results for '{user_product}': {str(e)}")
+                # Проверяем наличие результатов через JavaScript
+                results_found = driver.execute_script(
+                    "return document.getElementsByClassName('cbuk31w pyi2ep2 l1ucbhj1 v1y5jj7x').length > 0;"
+                )
+                if not results_found:
+                    logger.warning(f"No search results found for '{user_product}'")
                     product_data = {
                         "name": user_product,
                         "category": category,
@@ -185,7 +182,7 @@ def make_dish():
 
                     # Дополнительная имитация поведения
                     driver.execute_script("window.scrollTo(0, document.body.scrollHeight / 3);")
-                    time.sleep(random.uniform(1, 2))
+                    time.sleep(random.uniform(2, 4))
 
                     price = "Цена не найдена"
                     try:
