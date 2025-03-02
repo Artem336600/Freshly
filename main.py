@@ -12,6 +12,9 @@ from selenium.webdriver.common.by import By
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.chrome.service import Service
 from webdriver_manager.chrome import ChromeDriverManager
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
+from selenium.common.exceptions import TimeoutException, WebDriverException
 from selenium.webdriver.common.action_chains import ActionChains
 
 # Настройка логирования
@@ -94,7 +97,6 @@ def make_dish():
             driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=chrome_options)
             logger.info("Chromedriver initialized successfully")
 
-            # Скрываем флаг webdriver
             driver.execute_cdp_cmd("Page.addScriptToEvaluateOnNewDocument", {
                 "source": """
                     Object.defineProperty(navigator, 'webdriver', {
@@ -111,7 +113,7 @@ def make_dish():
             start_time = time.time()
 
             for product in ai_result["products"]:
-                if time.time() - start_time > 120:  # Общий лимит 2 минуты
+                if time.time() - start_time > 120:
                     logger.warning("Превышен общий лимит времени парсинга")
                     break
 
@@ -121,11 +123,8 @@ def make_dish():
                 
                 logger.info(f"Searching for: {user_product} at {search_url}")
                 driver.get(search_url)
-
-                # Случайная задержка
                 time.sleep(random.uniform(3, 6))
 
-                # Прокрутка и клик
                 driver.execute_script("window.scrollTo(0, document.body.scrollHeight / 2);")
                 time.sleep(random.uniform(2, 4))
                 actions = ActionChains(driver)
@@ -147,7 +146,6 @@ def make_dish():
                     matched_products.append(product_data)
                     continue
 
-                # Проверка результатов через JavaScript
                 results_found = driver.execute_script(
                     "return document.getElementsByClassName('cbuk31w pyi2ep2 l1ucbhj1 v1y5jj7x').length > 0;"
                 )
@@ -172,32 +170,36 @@ def make_dish():
 
                     logger.info(f"Navigating to product page: {full_url}")
                     driver.get(full_url)
-                    time.sleep(random.uniform(2, 5))  # Уменьшенное ожидание
+                    time.sleep(5)  # Фиксированная задержка для полной загрузки
 
-                    # Извлечение данных через JavaScript
-                    price = driver.execute_script("""
-                        let elem = document.querySelector('.c17r1xrr');
-                        if (elem) {
-                            let text = elem.textContent;
-                            let match = text.match(/(\d+\s*₽)/);
-                            return match ? match[0] : 'Цена не найдена';
-                        }
-                        return 'Цена не найдена';
-                    """)
+                    driver.execute_script("window.scrollTo(0, document.body.scrollHeight / 3);")
+                    time.sleep(2)
 
-                    description = driver.execute_script("""
-                        let elem = document.querySelector('.c17r1xrr');
-                        if (elem) {
-                            let text = elem.textContent.replace(/.*₽.*$/m, '').replace('В корзину', '').trim();
-                            return text || 'Описание отсутствует';
-                        }
-                        return 'Описание отсутствует';
-                    """)
+                    price = "Цена не найдена"
+                    try:
+                        price_element = WebDriverWait(driver, 30).until(
+                            EC.presence_of_element_located((By.CLASS_NAME, "c17r1xrr"))
+                        )
+                        price_text = price_element.text
+                        price_match = re.search(r'(\d+\s*₽)', price_text)
+                        price = price_match.group(1) if price_match else "Цена не найдена"
+                    except TimeoutException:
+                        logger.warning(f"Price element 'c17r1xrr' not found for '{link_text}'")
 
-                    img_src = driver.execute_script("""
-                        let elem = document.querySelector('.ibhxbmx.p1wkliaw img');
-                        return elem ? elem.src : 'https://via.placeholder.com/150';
-                    """)
+                    description = "Описание отсутствует"
+                    try:
+                        desc_element = driver.find_element(By.CLASS_NAME, "c17r1xrr")
+                        description = re.sub(r'.*₽.*$', '', desc_element.text, flags=re.MULTILINE).strip()
+                        description = re.sub(r'В корзину', '', description).strip() or "Описание отсутствует"
+                    except:
+                        logger.warning(f"Description element 'c17r1xrr' not found for '{link_text}'")
+
+                    img_src = "https://via.placeholder.com/150"
+                    try:
+                        image_container = driver.find_element(By.CLASS_NAME, "ibhxbmx.p1wkliaw")
+                        img_src = image_container.find_element(By.TAG_NAME, "img").get_attribute("src")
+                    except:
+                        logger.warning(f"Image element 'ibhxbmx.p1wkliaw' not found for '{link_text}'")
 
                     product_data = {
                         "name": link_text,
