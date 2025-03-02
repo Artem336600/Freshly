@@ -80,7 +80,8 @@ def make_dish():
 
         # Настройка веб-драйвера
         chrome_options = Options()
-        chrome_options.add_argument("--headless")
+        # Закомментируем headless для теста
+        # chrome_options.add_argument("--headless")
         chrome_options.add_argument("--no-sandbox")
         chrome_options.add_argument("--disable-dev-shm-usage")
         chrome_options.add_argument("--disable-gpu")
@@ -140,7 +141,7 @@ def make_dish():
                     time.sleep(10)  # Ждём загрузки страницы товара
 
                     page_source = driver.page_source
-                    logger.info(f"Product page source excerpt for '{link_text}': {page_source[:1000]}")
+                    logger.info(f"Product page source for '{link_text}': {page_source[:2000]}")  # Увеличим отрывок для отладки
 
                     price = "Цена не найдена"
                     try:
