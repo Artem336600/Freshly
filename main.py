@@ -166,11 +166,19 @@ def make_dish():
                     link_element = element.find_element(By.TAG_NAME, "a")
                     link_href = link_element.get_attribute("href")
                     full_url = link_href if link_href.startswith("https://") else f"https://lavka.yandex.ru{link_href}"
-                    link_text = link_element.find_element(By.CLASS_NAME, "l4t8cc8.a1dq5c6d").text.strip()
+                    
+                    # Проверяем название через более общий селектор
+                    try:
+                        link_text = link_element.find_element(By.TAG_NAME, "span").text.strip()
+                        if not link_text:
+                            link_text = link_element.text.strip()
+                    except:
+                        link_text = user_product  # Запасной вариант
+                        logger.warning(f"Failed to extract product name, using '{user_product}'")
 
                     logger.info(f"Navigating to product page: {full_url}")
                     driver.get(full_url)
-                    time.sleep(5)  # Фиксированная задержка для полной загрузки
+                    time.sleep(5)  # Фиксированная задержка
 
                     driver.execute_script("window.scrollTo(0, document.body.scrollHeight / 3);")
                     time.sleep(2)
