@@ -1,6 +1,7 @@
 import telebot
 from mistralai import Mistral
 import os
+import random
 
 # Токены
 TELEGRAM_BOT_TOKEN = "7636254297:AAEm_lZy-jTh4Fr4IyPF6E1PnDl2nhST-4s"
@@ -23,26 +24,26 @@ def send_welcome_private(message):
 # Обработка сообщений в канале
 @bot.channel_post_handler(content_types=['text'])
 def handle_channel_message(message):
-    user_message = message.text
-    if user_message.startswith('/'):
+    if message.text.startswith('/'):
         return
-    reply = get_mistral_response(user_message)
-    bot.reply_to(message, reply)
+    if random.random() <= 0.2:  # 20% шанс ответа
+        reply = get_mistral_response(message.text)
+        bot.reply_to(message, reply)
 
 # Обработка личных сообщений
 @bot.message_handler(content_types=['text'])
 def handle_private_message(message):
-    user_message = message.text
-    if user_message.startswith('/'):
+    if message.text.startswith('/'):
         return
-    reply = get_mistral_response(user_message)
-    bot.reply_to(message, reply)
+    if random.random() <= 0.2:  # 20% шанс ответа
+        reply = get_mistral_response(message.text)
+        bot.reply_to(message, reply)
 
 # Функция для ответа от Mistral
 def get_mistral_response(user_message):
     prompt = f"""
     отвечай на русском
-    отвечай на сообщение как будто ты очень высокомерный мажор и всех презераешь за бедность, а ещё ты ненавидишь цыган и всех с ними сравниваешь, никогда не объясняй свой ответ
+    отвечай на сообщение как будто ты очень высокомерный мажор и всех презираешь за бедность, а ещё ты ненавидишь цыган и всех с ними сравниваешь, никогда не объясняй свой ответ
     Сообщение: {user_message}
     """
     print(f"Получил хуйню: {user_message}")  # Отладка
