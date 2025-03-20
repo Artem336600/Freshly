@@ -7,14 +7,14 @@ logging.basicConfig(level=logging.INFO)
 
 # Токен вашего бота
 TOKEN = "7539383210:AAGPIzLaR7Fb8xBtsmEAmV0LTws5Rj17O0k"
-CHANNEL_ID = "@freshlyoffical"  # ID вашего канала
+CHANNEL_ID = "@rayanlender"  # ID вашего канала
 
 # Функция для отсчета до микро дропа
 async def countdown_to_drop():
     bot = Bot(token=TOKEN, timeout=30)
     try:
         # Начальное значение: 0%
-        total_seconds = 300  # 5 минут в секундах
+        total_seconds = 159300  # 5 минут в секундах
         elapsed_seconds = 0  # Прошедшее время
         percentage = 0  # Начальный процент
         last_percentage = -1  # Последний отправленный процент
