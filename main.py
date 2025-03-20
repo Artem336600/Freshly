@@ -14,7 +14,7 @@ async def countdown_to_drop():
     bot = Bot(token=TOKEN, timeout=30)
     try:
         # Начальное значение: 0%
-        total_seconds = 159300  # 5 минут в секундах
+        total_seconds = 159300  # 44 часа в секундах
         elapsed_seconds = 0  # Прошедшее время
         percentage = 0  # Начальный процент
         last_percentage = -1  # Последний отправленный процент
@@ -26,8 +26,8 @@ async def countdown_to_drop():
         logging.info(f"Начальный отсчет отправлен: {percentage}%")
 
         while elapsed_seconds < total_seconds:
-            await asyncio.sleep(1)  # Ждем 1 секунду
-            elapsed_seconds += 1  # Увеличиваем прошедшее время
+            await asyncio.sleep(10)  # Ждем 10 секунд (вместо 1)
+            elapsed_seconds += 10  # Увеличиваем прошедшее время на 10 секунд
             percentage = int((elapsed_seconds / total_seconds) * 100)  # Вычисляем процент
 
             # Редактируем сообщение только если процент изменился
